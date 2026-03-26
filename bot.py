@@ -45,9 +45,9 @@ def main():
         send_msg(report, TOPIC_ANALYSIS)
 
     # ២. Alert តំបន់ទិញលក់ (អ្នកអាចចូលមកកែលេខ ២៦៤០ ឬ ២៦៧០ នេះបានរាល់ព្រឹក)
-    if price <= 2640:
+    if price <= 4545:
         send_msg(f"🚨 **OANDA BUY ALERT!**\n💰 តម្លៃមាសចុះដល់: ${price:,.2f}\n🔥 តំបន់គួរពិចារណា BUY!", TOPIC_ALERTS)
-    elif price >= 2670:
+    elif price >= 4350:
         send_msg(f"🚨 **OANDA SELL ALERT!**\n💰 តម្លៃមាសឡើងដល់: ${price:,.2f}\n🔥 តំបន់គួរពិចារណា SELL!", TOPIC_ALERTS)
 
 if __name__ == "__main__":
