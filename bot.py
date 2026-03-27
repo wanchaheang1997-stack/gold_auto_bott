@@ -60,7 +60,7 @@ def main():
     is_report_time = False
     session_name = ""
 
-    if current_hour == 8 and current_minute < 15:
+    if current_hour == 9 and current_minute < 15:
         is_report_time = True
         session_name = "🌏 ASIA SESSION"
     elif current_hour == 14 and current_minute < 15:
