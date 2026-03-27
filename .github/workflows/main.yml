@@ -2,9 +2,9 @@ name: XAUUSD SMC Hunter Bot
 
 on:
   schedule:
-    # ឱ្យ Bot រត់រាល់ ១៥ នាទីម្តង (គ្រប់គ្រាន់សម្រាប់ចាប់ Liquidity Sweep)
+    # ឱ្យ Bot រត់រាល់ ១៥ នាទីម្តង ដើម្បីចាប់យកតម្លៃទម្លុះ Liquidity (Sweep) ឱ្យទាន់ពេល
     - cron: '*/15 * * * *'
-  workflow_dispatch: # សម្រាប់ឱ្យបងចុច Run Test ដោយដៃបាន
+  workflow_dispatch: # សម្រាប់ឱ្យបងចុច Run Test ដោយដៃតាមចិត្តចង់
 
 jobs:
   build:
@@ -22,6 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          # បន្ថែម pytz សម្រាប់ Timezone និង yfinance សម្រាប់ទិន្នន័យមាស
           pip install requests yfinance pandas pytz
 
       - name: Run Bot
