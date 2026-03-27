@@ -4,30 +4,31 @@ import yfinance as yf
 from datetime import datetime
 import pytz
 
-# --- Configuration ពី GitHub Secrets ---
+# --- ការកំណត់ពី GitHub Secrets ---
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = os.getenv('TELEGRAM_ID')
 TOPIC_ANALYSIS = os.getenv('TOPIC_ANALYSIS')
 TOPIC_ALERTS = os.getenv('TOPIC_ALERTS')
 
-# --- 🎯 ១. កែប្រែទិន្នន័យវិភាគនៅទីនេះរាល់ព្រឹក ---
+# --- 🎯 ទិន្នន័យវិភាគ (បងអាចចូលកែលេខទាំងនេះរាល់ព្រឹក) ---
 RESISTANCE_ZONE = "4,465 – 4,540"
 SUPPLY_ZONE = "4,420 – 4,460"
 MAJOR_DEMAND = "4,000"
 SL_PRICE = 4510
 TP_LEVELS = "4330 / 4230 / 4000"
 
-# --- 📅 ២. តារាងព័ត៌មានសេដ្ឋកិច្ច (បងអាចដូរព័ត៌មានតាមថ្ងៃនីមួយៗ) ---
+# តារាងព័ត៌មាន (កែតាមថ្ងៃនីមួយៗ)
 NEWS_TABLE = (
-    "| ម៉ោង (GMT+7) | ព័ត៌មានសេដ្ឋកិច្ច | កម្រិត | ការរំពឹងទុក |\n"
-    "|---|---|---|---|\n"
-    "| 🔴 7:30 PM | Initial Jobless Claims | High | 211K |\n"
-    "| 🟡 9:00 PM | KC Fed Index | Medium | 10 |\n"
-    "| 🔴 10:00 PM | Fed Chair Speech | High | - |"
+    "| ម៉ោង (GMT+7) | ព័ត៌មានសេដ្ឋកិច្ច | កម្រិត |\n"
+    "|---|---|---|\n"
+    "| 🔴 7:30 PM | Initial Jobless Claims | High |\n"
+    "| 🟡 9:00 PM | KC Fed Index | Medium |\n"
+    "| 🔴 10:00 PM | Fed Chair Speech | High |"
 )
 
 def get_gold_data():
     try:
+        # ទាញតម្លៃមាសពី Yahoo Finance (GC=F គឺ Gold Futures)
         gold = yf.Ticker("GC=F")
         data = gold.history(period="2d")
         if data.empty: return None
@@ -37,13 +38,21 @@ def get_gold_data():
         low = data['Low'].iloc[-1]
         pct = ((curr - prev) / prev) * 100
         return {"price": curr, "high": high, "low": low, "pct": pct}
-    except: return None
+    except Exception as e:
+        print(f"Error fetching data: {e}")
+        return None
 
 def send_msg(text, topic_id):
     if not topic_id: return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id}
-    requests.post(url, data=payload)
+    payload = {
+        "chat_id": GROUP_ID, 
+        "text": text, 
+        "parse_mode": "Markdown", 
+        "message_thread_id": topic_id
+    }
+    r = requests.post(url, data=payload)
+    print(f"Telegram Response for Topic {topic_id}: {r.json()}")
 
 def main():
     data = get_gold_data()
@@ -56,10 +65,12 @@ def main():
     current_hour = now_kh.hour
     current_minute = now_kh.minute
 
-    # --- ⏰ លក្ខខណ្ឌផ្ញើ Report តាម Session ---
+    # --- ⏰ លក្ខខណ្ឌផ្ញើ Report តាម Session (៣ ដងក្នុង ១ ថ្ងៃ) ---
     is_report_time = False
     session_name = ""
 
+    # ឆែកម៉ោង ៨ ព្រឹក (Asia), ២ រសៀល (London), ៧ យប់ (NY)
+    # យើងប្រើ minute < 15 ព្រោះ GitHub Actions រត់រាល់ ១៥ នាទីម្តង
     if current_hour == 8 and current_minute < 15:
         is_report_time = True
         session_name = "🌏 ASIA SESSION"
@@ -75,10 +86,11 @@ def main():
             f"📊 **REPORT: {session_name}**\n"
             f"📅 {now_kh.strftime('%d/%m/%Y')} | ⏰ {now_kh.strftime('%H:%M %p')}\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💰 **Price:** `${price:,.2f}` ({data['pct']:+.2f}%)\n"
-            f"🏔️ **H/L Today:** `${data['high']:,.2f}` / `${data['low']:,.2f}`\n\n"
+            f"💰 **Current Price:** `${price:,.2f}`\n"
+            f"📈 Daily Change: `{data['pct']:+.2f}%`\n"
+            f"🏔️ Today H/L: `${data['high']:,.2f}` / `${data['low']:,.2f}`\n\n"
             
-            f"📰 **HIGH IMPACT NEWS TODAY:**\n"
+            f"📰 **NEWS CALENDAR:**\n"
             f"```\n{NEWS_TABLE}\n```\n"
             
             f"🎯 **INTRADAY ROADMAP**\n"
@@ -92,12 +104,12 @@ def main():
         )
         send_msg(report, TOPIC_ANALYSIS)
 
-    # --- 🚨 Alert តម្លៃ (រត់រាល់ ១៥ នាទី) ---
+    # --- 🚨 ប្រព័ន្ធ Alert តម្លៃ (រត់រាល់ ១៥ នាទី ដើម្បីការពារហានិភ័យ) ---
+    # កែលេខតម្លៃទាំងនេះតាមបច្ចេកទេសបង (ឧទាហរណ៍ Alert ពេលដល់ Support/Resistance 1)
     if price <= 4375.0:
-        send_msg(f"🚨 **GOLD ALERT:** Price hit Support `${price:,.2f}`", TOPIC_ALERTS)
+        send_msg(f"🚨 **GOLD ALERT: BUY ZONE**\nPrice hit Support: `${price:,.2f}`", TOPIC_ALERTS)
     elif price >= 4465.0:
-        send_msg(f"🚨 **GOLD ALERT:** Price hit Resistance `${price:,.2f}`", TOPIC_ALERTS)
+        send_msg(f"🚨 **GOLD ALERT: SELL ZONE**\nPrice hit Resistance: `${price:,.2f}`", TOPIC_ALERTS)
 
 if __name__ == "__main__":
-    main()
-    
+    main() 
