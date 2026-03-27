@@ -3,60 +3,54 @@ import os
 from datetime import datetime
 import pytz
 
-# ព័ត៌មានបច្ចេកទេស
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = "-1003709011282"
-TOPIC_ANALYSIS = "8"
-TOPIC_ALERTS = "18"
 
-# --- កំណត់ Key Zones សម្រាប់ថ្ងៃនេះ (បងកែលេខនេះរាល់ព្រឹក) ---
-RESISTANCE = 4510.0
-SUPPORT = 4380.0
-
-def get_oanda_data():
-    try:
-        api_url = "https://finnhub.io/api/v1/quote?symbol=OANDA:XAU_USD&token=csqi9p1r01qs8636p630csqi9p1r01qs8636p63g"
-        res = requests.get(api_url).json()
-        return {"price": float(res['c']), "high": float(res['h']), "low": float(res['l']), "change": float(res['dp'])}
-    except: return None
+# សាកល្បងដូរ Topic ID មកលេខផ្សេង ឬទុកចោល (បើមិនច្បាស់)
+TOPIC_ANALYSIS = "8" 
 
 def send_msg(text, topic_id):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id, "disable_web_page_preview": True}
-    requests.post(url, data=payload)
+    
+    # ព្យាយាមផ្ញើបែបមាន Topic
+    payload_with_topic = {
+        "chat_id": GROUP_ID, 
+        "text": text, 
+        "parse_mode": "Markdown", 
+        "message_thread_id": topic_id
+    }
+    
+    # ព្យាយាមផ្ញើបែបធម្មតា (បើ Topic ID ខុស ក៏វានឹងលោតចូល Group ដែរ)
+    payload_normal = {
+        "chat_id": GROUP_ID, 
+        "text": text, 
+        "parse_mode": "Markdown"
+    }
+    
+    # រត់ការផ្ញើ
+    r = requests.post(url, data=payload_with_topic)
+    if not r.json().get("ok"):
+        requests.post(url, data=payload_normal)
 
 def main():
-    data = get_oanda_data()
-    if not data: return
+    # ទាញទិន្នន័យ Oanda
+    api_url = "https://finnhub.io/api/v1/quote?symbol=OANDA:XAU_USD&token=csqi9p1r01qs8636p630csqi9p1r01qs8636p63g"
+    data = requests.get(api_url).json()
+    price = float(data['c'])
     
-    price = data['price']
     kh_tz = pytz.timezone("Asia/Phnom_Penh")
-    kh_time = datetime.now(kh_tz)
+    kh_time = datetime.now(kh_tz).strftime('%H:%M:%S')
 
-    # ១. របាយការណ៍វិភាគ (វានឹងផ្ញើឱ្យបងចន្លោះម៉ោង ៨ ដល់ ៩ ព្រឹក)
-    if kh_time.hour == 8:
-        report = (
-            f"📊 **Titanium321 | របាយការណ៍វិភាគមាស**\n"
-            f"📅 ថ្ងៃទី {kh_time.strftime('%d %m %Y')}\n"
-            f"------------------------------------\n"
-            f"💰 **Current Price:** ${price:,.2f} (OANDA)\n"
-            f"📈 **Daily Change:** {data['change']:.2f}%\n"
-            f"🏔️ **High/Low:** ${data['high']:,.2f} / ${data['low']:,.2f}\n\n"
-            f"🎯 **Key Zones Today:**\n"
-            f"📍 Resistance: **${RESISTANCE:,.2f}**\n"
-            f"📍 Support: **${SUPPORT:,.2f}**\n\n"
-            f"✍️ **Analyzed by: E11**\n"
-            f"🚀 *Power by Gemini AI Assistant*"
-        )
-        send_msg(report, TOPIC_ANALYSIS)
-
-    # ២. Alert តម្លៃ (រត់រាល់ ១៥ នាទីម្តង)
-    if price <= SUPPORT:
-        send_msg(f"🚨 **Titanium321 | BUY ALERT!**\n💰 តម្លៃដល់ Support: **${price:,.2f}**\n👉 ពិនិត្យមើល Price Action!", TOPIC_ALERTS)
-    elif price >= RESISTANCE:
-        send_msg(f"🚨 **Titanium321 | SELL ALERT!**\n💰 តម្លៃដល់ Resistance: **${price:,.2f}**\n👉 ពិនិត្យមើល Price Action!", TOPIC_ALERTS)
+    # បង្ខំឱ្យផ្ញើសារ Report ភ្លាមៗ (មិនបាច់ចាំលក្ខខណ្ឌម៉ោង ៨ ទេ ដើម្បីតេស្តឱ្យឃើញ)
+    msg = (
+        f"🚀 **Titanium321 | Live Update**\n"
+        f"💰 តម្លៃមាសបច្ចុប្បន្ន: **${price:,.2f}**\n"
+        f"⏰ ម៉ោងតេស្ត: {kh_time}\n"
+        f"✍️ Analyzed by: E11"
+    )
+    
+    send_msg(msg, TOPIC_ANALYSIS)
 
 if __name__ == "__main__":
     main()
-    
     
