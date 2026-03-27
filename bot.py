@@ -1,80 +1,113 @@
-import requests
-import os
 import yfinance as yf
 import pandas as pd
+import numpy as np
+import os
+import requests
 from datetime import datetime
 import pytz
 
-# --- Configuration (Hardcoded IDs) ---
+# --- Configuration ---
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = os.getenv('TELEGRAM_ID')
-TOPIC_ANALYSIS = 8   
-TOPIC_ALERTS = 18    
+TOPIC_ANALYSIS = 8
+TOPIC_ALERTS = 18
 
-def get_session_info(hour):
-    """កំណត់ Session តាមម៉ោងដែលបងផ្ដល់ឱ្យ"""
-    if 8 <= hour < 14: return "🇯🇵 Asia Session Open", "Focus: Tokyo/Sydney Liquidity"
-    if 14 <= hour < 19: return "🇬🇧 London Session Open", "Focus: London Breakout / Judas Swing"
-    if 19 <= hour < 23: return "🇺🇸 New York Session Open", "Focus: High Volatility / News Drivers"
-    return "🌑 Pre-Market / Off-Hours", "Focus: Consolidation"
+def get_session_name(hour):
+    if 8 <= hour < 14: return "🇯🇵 Asia Session"
+    if 14 <= hour < 19: return "🇬🇧 London Session"
+    if 19 <= hour < 23: return "🇺🇸 New York Session"
+    return "🌑 Off-Session"
 
-def send_telegram(text, topic_id):
-    if not TOKEN or not GROUP_ID: return
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id}
-    try: requests.post(url, data=payload, timeout=10)
-    except: pass
+def calculate_market_intelligence(df):
+    """គណនា Volume Flow & Smart Money Detection"""
+    change = df['Close'].diff()
+    buy_v = df['Volume'][change > 0].sum()
+    sell_v = df['Volume'][change < 0].sum()
+    buy_p = (buy_v / (buy_v + sell_v) * 100) if (buy_v + sell_v) > 0 else 50
+    
+    vol_sma = df['Volume'].rolling(20).mean().iloc[-1]
+    curr_vol = df['Volume'].iloc[-1]
+    manipulation = "⚠️ HIGH CAUTION" if curr_vol > vol_sma * 1.8 else "Low / Normal"
+    
+    short_ema = df['Close'].ewm(span=12).mean().iloc[-1]
+    long_ema = df['Close'].ewm(span=26).mean().iloc[-1]
+    trend = "Aggressive Bearish 📉" if short_ema < long_ema else "Bullish Momentum 📈"
+    
+    return round(buy_p, 1), manipulation, trend
+
+def calculate_volume_profile(df):
+    """រក POC, VAH, VAL (Key Volume Zones)"""
+    price_min, price_max = df['Low'].min(), df['High'].max()
+    bins = np.linspace(price_min, price_max, 20)
+    vbp, _ = np.histogram(df['Close'], bins=bins, weights=df['Volume'])
+    poc = (bins[np.argmax(vbp)] + bins[np.argmax(vbp)+1]) / 2
+    vah, val = bins[-3], bins[2]
+    return poc, vah, val
 
 def main():
-    # កំណត់ម៉ោងនៅកម្ពុជា
     kh_tz = pytz.timezone("Asia/Phnom_Penh")
     now_kh = datetime.now(kh_tz)
-    day_of_week = now_kh.weekday() # 0=Monday, 5=Saturday, 6=Sunday
-    current_hour = now_kh.hour
+    if now_kh.weekday() >= 5: return 
 
-    # --- លក្ខខណ្ឌសម្រាកថ្ងៃចុងសប្តាហ៍ (សៅរ៍-អាទិត្យ) ---
-    if day_of_week >= 5:
-        print("Weekend: Bank Closed. Bot is resting...")
-        return
-
-    # ទាញយកទិន្នន័យមាស
     gold = yf.Ticker("GC=F")
-    df_h1 = gold.history(period="10d", interval="1h")
+    df_h1 = gold.history(period="15d", interval="1h")
     if df_h1.empty: return
+
+    # គណនា Metrics សម្រាប់ Dashboard
+    buy_p, manipulation, trend_status = calculate_market_intelligence(df_h1)
+    poc, vah, val = calculate_volume_profile(df_h1)
     
     price = df_h1['Close'].iloc[-1]
-    pdh, pdl = df_h1['High'].iloc[-24:].max(), df_h1['Low'].iloc[-24:].min()
-    session_name, focus = get_session_info(current_hour)
+    daily_high = df_h1['High'].iloc[-24:].max()
+    daily_low = df_h1['Low'].iloc[-24:].min()
+    daily_change = ((price - df_h1['Open'].iloc[-24]) / df_h1['Open'].iloc[-24]) * 100
 
-    # --- ១. របាយការណ៍វិភាគតាម Session (Topic ID: 8) ---
-    # បោះ Report តែនៅម៉ោងដើម Session (8:00, 14:00, 19:00) ឬតាមការចុច Manual
-    is_session_start = current_hour in [8, 14, 19]
-    is_manual = os.getenv('GITHUB_EVENT_NAME') == 'workflow_dispatch'
+    # --- FULL INSTITUTIONAL REPORT WITH YOUR SPECIFIC STYLE ---
+    report = (
+        f"📊 **របាយការណ៍វិភាគមាសប្រចាំថ្ងៃ (XAU/USD)**\n"
+        f"*{get_session_name(now_kh.hour)} | {now_kh.strftime('%d %B %Y')}*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"💰 **Live Price:** `${price:,.2f}` ({daily_change:+.2f}%)\n"
+        f"🎯 **Today's Range:** `${daily_low:,.2f}` - `${daily_high:,.2f}`\n\n"
+        
+        f"🧠 **MARKET INTELLIGENCE DASHBOARD**\n"
+        f"• **Trend Status:** `{trend_status}`\n"
+        f"• **Volume Flow:** 🐂 `{buy_p}%` | 🐻 `{100-buy_p}%`\n"
+        f"• **Smart Money:** `{manipulation}`\n"
+        f"• **Momentum:** `{'Strongly Negative' if buy_p < 45 else 'Positive'}`\n\n"
+        
+        f"🏗️ **SMC & VOLUME ZONES (1H)**\n"
+        f"• **POC (Fair Value):** `${poc:,.2f}`\n"
+        f"• **VAH (Resistance):** `${vah:,.2f}`\n"
+        f"• **VAL (Support):** `${val:,.2f}`\n\n"
+        
+        f"🌍 **១. ស្ថានភាព MACRO & ព័ត៌មាន (FUNDAMENTAL)**\n"
+        f"📊 **និន្នាការ៖** `{trend_status}`\n"
+        f"ទីផ្សារមាសកំពុងរងសម្ពាធខ្លាំងពីវិបត្តិថាមពលសកល និងជម្លោះភូមិសាស្ត្រនយោបាយ។ "
+        f"សញ្ញា `{manipulation}` បង្ហាញពីសកម្មភាពស្ថាប័នធំៗក្នុងតំបន់ Premium។\n\n"
+        
+        f"🎯 **២. INTRADAY EXECUTION ROADMAP**\n"
+        f"🗺️ **Key Zones (Reference):**\n"
+        f"• Supply Zone: `${vah:,.2f}` (រង់ចាំ SELL)\n"
+        f"• Major Demand: `${val:,.2f}` (កម្រិតចិត្តសាស្ត្រ)\n\n"
+        
+        f"⚡ **TRADE SCENARIOS**\n"
+        f"🅰️ **Scenario A (High Prob):** រង់ចាំតម្លៃទាញត្រឡប់ទៅ `${poc:,.1f}` រួចបង្កើត M5 CHoCH ដើម្បីបន្តនិន្នាការចុះ។\n"
+        f"🅱️ **Scenario B (Scalp):** ប្រសិនបើតម្លៃ Sweep `${daily_low:,.1f}` (LSL) អាចមាន Scalp Buy បណ្តោះអាសន្ន។\n\n"
+        
+        f"⚠️ **៣. ការគ្រប់គ្រងហានិភ័យ (RISK MANAGEMENT)**\n"
+        f"• **Killzones:** ផ្ដោតលើវគ្គ NY សម្រាប់ Volatility ខ្ពស់។\n"
+        f"• **Risk:** រក្សាការ Risk ត្រឹម 1% ប៉ុណ្ណោះ។\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"Generated by Your AI Assistant 🚀 | 📌 *Educational Purpose Only*"
+    )
+    
+    send_telegram(report, TOPIC_ANALYSIS)
 
-    if is_session_start or is_manual:
-        report = (
-            f"🏦 **BANK SESSION UPDATE**\n"
-            f"📅 `{now_kh.strftime('%d %b %Y | %H:%M')}`\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"🌐 **Current Session:** `{session_name}`\n"
-            f"🎯 **Market Focus:** _{focus}_\n\n"
-            f"💰 **Live Gold Price:** `${price:,.2f}`\n\n"
-            f"🏗️ **SMC LEVELS (H1 Framework)**\n"
-            f"• **BSL (Liquidity High):** `${pdh:,.2f}`\n"
-            f"• **SSL (Liquidity Low):** `${pdl:,.2f}`\n\n"
-            f"⚡ **STRATEGY FOR THIS SESSION**\n"
-            f"1. រង់ចាំតម្លៃ Sweep កម្រិត High/Low នៃ Session មុន។\n"
-            f"2. ប្រសិនបើមាន **M5 MSS** ក្រោយពេល Sweep គឺជា High Prob Setup។\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"📌 *Bot នឹង Update ជូននៅដើម Session បន្ទាប់។*"
-        )
-        send_telegram(report, TOPIC_ANALYSIS)
-
-    # --- ២. ផ្នែក Alert ស្កែនរាល់ម៉ោង (Topic ID: 18) ---
-    if price >= pdh:
-        send_telegram(f"🚨 **LIQUIDITY ALERT!**\n🔥 Price swept PDH: `${price:,.2f}`\n🌐 Session: {session_name}", TOPIC_ALERTS)
-    elif price <= pdl:
-        send_telegram(f"🚨 **LIQUIDITY ALERT!**\n🔥 Price swept PDL: `${price:,.2f}`\n🌐 Session: {session_name}", TOPIC_ALERTS)
+def send_telegram(text, topic_id):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id}
+    requests.post(url, data=payload)
 
 if __name__ == "__main__":
     main()
