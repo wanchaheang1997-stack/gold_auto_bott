@@ -3,40 +3,60 @@ import os
 from datetime import datetime
 import pytz
 
-# ១. ទាញយក Token ពី GitHub Secrets
+# ព័ត៌មានបច្ចេកទេស
 TOKEN = os.getenv('TELEGRAM_TOKEN')
-
-# ២. ព័ត៌មាន Group និង Topic (បងបានផ្ដល់ឱ្យ)
 GROUP_ID = "-1003709011282"
 TOPIC_ANALYSIS = "8"
 TOPIC_ALERTS = "18"
 
+# --- កំណត់ Key Zones សម្រាប់ថ្ងៃនេះ (បងកែលេខនេះរាល់ព្រឹក) ---
+RESISTANCE = 4510.0
+SUPPORT = 4380.0
+
+def get_oanda_data():
+    try:
+        api_url = "https://finnhub.io/api/v1/quote?symbol=OANDA:XAU_USD&token=csqi9p1r01qs8636p630csqi9p1r01qs8636p63g"
+        res = requests.get(api_url).json()
+        return {"price": float(res['c']), "high": float(res['h']), "low": float(res['l']), "change": float(res['dp'])}
+    except: return None
+
 def send_msg(text, topic_id):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": GROUP_ID, 
-        "text": text, 
-        "parse_mode": "Markdown", 
-        "message_thread_id": topic_id
-    }
-    response = requests.post(url, data=payload)
-    # បង្ហាញលទ្ធផលក្នុង GitHub Actions Log ដើម្បីឱ្យយើងដឹងថា error អី
-    print(f"Sending to Topic {topic_id}: {response.json()}")
+    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id, "disable_web_page_preview": True}
+    requests.post(url, data=payload)
 
 def main():
+    data = get_oanda_data()
+    if not data: return
+    
+    price = data['price']
     kh_tz = pytz.timezone("Asia/Phnom_Penh")
-    kh_time = datetime.now(kh_tz).strftime('%H:%M:%S')
+    kh_time = datetime.now(kh_tz)
 
-    print(f"--- កំពុងចាប់ផ្តើមតេស្តនៅម៉ោង: {kh_time} ---")
+    # ១. របាយការណ៍វិភាគ (វានឹងផ្ញើឱ្យបងចន្លោះម៉ោង ៨ ដល់ ៩ ព្រឹក)
+    if kh_time.hour == 8:
+        report = (
+            f"📊 **Titanium321 | របាយការណ៍វិភាគមាស**\n"
+            f"📅 ថ្ងៃទី {kh_time.strftime('%d %m %Y')}\n"
+            f"------------------------------------\n"
+            f"💰 **Current Price:** ${price:,.2f} (OANDA)\n"
+            f"📈 **Daily Change:** {data['change']:.2f}%\n"
+            f"🏔️ **High/Low:** ${data['high']:,.2f} / ${data['low']:,.2f}\n\n"
+            f"🎯 **Key Zones Today:**\n"
+            f"📍 Resistance: **${RESISTANCE:,.2f}**\n"
+            f"📍 Support: **${SUPPORT:,.2f}**\n\n"
+            f"✍️ **Analyzed by: E11**\n"
+            f"🚀 *Power by Gemini AI Assistant*"
+        )
+        send_msg(report, TOPIC_ANALYSIS)
 
-    # តេស្តផ្ញើចូលបន្ទប់ Analysis
-    test_1 = f"🔔 **Titanium321 | TEST 1**\n📍 បញ្ជូនទៅកាន់: Analysis (Topic 8)\n⏰ ម៉ោងនៅខ្មែរ: {kh_time}\n✅ ស្ថានភាព: កំពុងតេស្តការតភ្ជាប់..."
-    send_msg(test_1, TOPIC_ANALYSIS)
-
-    # តេស្តផ្ញើចូលបន្ទប់ Alerts
-    test_2 = f"⚠️ **Titanium321 | TEST 2**\n📍 បញ្ជូនទៅកាន់: Alerts (Topic 18)\n✍️ Analyzed by: E11\n🚀 ស្ថានភាព: Bot កំពុងដំណើរការ!"
-    send_msg(test_2, TOPIC_ALERTS)
+    # ២. Alert តម្លៃ (រត់រាល់ ១៥ នាទីម្តង)
+    if price <= SUPPORT:
+        send_msg(f"🚨 **Titanium321 | BUY ALERT!**\n💰 តម្លៃដល់ Support: **${price:,.2f}**\n👉 ពិនិត្យមើល Price Action!", TOPIC_ALERTS)
+    elif price >= RESISTANCE:
+        send_msg(f"🚨 **Titanium321 | SELL ALERT!**\n💰 តម្លៃដល់ Resistance: **${price:,.2f}**\n👉 ពិនិត្យមើល Price Action!", TOPIC_ALERTS)
 
 if __name__ == "__main__":
     main()
+    
     
