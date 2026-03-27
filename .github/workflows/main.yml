@@ -1,36 +1,27 @@
-name: XAUUSD SMC Hunter Bot
+name: XAUUSD Bank Session Bot
 
 on:
   schedule:
-    # ឱ្យ Bot រត់រាល់ ១៥ នាទីម្តង ដើម្បីចាប់យកតម្លៃទម្លុះ Liquidity (Sweep) ឱ្យទាន់ពេល
-    - cron: '*/15 * * * *'
-  workflow_dispatch: # សម្រាប់ឱ្យបងចុច Run Test ដោយដៃតាមចិត្តចង់
+    # រត់រាល់ ១ ម៉ោងម្តង (រៀងរាល់នាទីទី ០)
+    - cron: '0 * * * *'
+  workflow_dispatch: 
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          # បន្ថែម Library សំខាន់ៗសម្រាប់ SMC Logic
-          pip install requests yfinance pandas numpy pytz
-
+          pip install requests yfinance pandas pytz
       - name: Run Bot
         env:
-          # ត្រូវប្រាកដថាឈ្មោះ Secrets ក្នុង GitHub ដូចគ្នានឹងខាងក្រោមនេះ
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
-          TOPIC_ANALYSIS: ${{ secrets.TOPIC_ANALYSIS }}
-          TOPIC_ALERTS: ${{ secrets.TOPIC_ALERTS }}
         run: python bot.py
         
