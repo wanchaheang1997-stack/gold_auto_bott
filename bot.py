@@ -4,7 +4,7 @@ import yfinance as yf
 from datetime import datetime
 import pytz
 
-# --- Configuration ពី GitHub Secrets ---
+# --- ១. ការកំណត់ (យកចេញពី GitHub Secrets) ---
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = os.getenv('TELEGRAM_ID')
 TOPIC_ANALYSIS = os.getenv('TOPIC_ANALYSIS')
@@ -12,82 +12,105 @@ TOPIC_ALERTS = os.getenv('TOPIC_ALERTS')
 
 def get_smc_data():
     try:
+        # ទាញយកទិន្នន័យមាស (GC=F) រយៈពេល ៥ ថ្ងៃ កម្រិត ១ ម៉ោង (1h)
         gold = yf.Ticker("GC=F")
-        # ទាញយកទិន្នន័យ Hourly ដើម្បីរក PDH/PDL និង Swing
         df = gold.history(period="5d", interval="1h")
-        if df.empty: return None
+        
+        if df.empty or len(df) < 24:
+            return None
 
-        # 1. Previous Day High/Low (PDH/PDL)
-        # យកទិន្នន័យ ២៤ ទៀនចុងក្រោយ (មិនរាប់ទៀនបច្ចុប្បន្ន)
+        # --- ២. គណនា Liquidity Levels (SMC Logic) ---
+        # PDH & PDL: រកតម្លៃខ្ពស់/ទាបបំផុតក្នុងចំណោម ២៤ ទៀនមុន (ម្សិលមិញ)
         pdh = df['High'].iloc[-25:-1].max()
         pdl = df['Low'].iloc[-25:-1].min()
 
-        # 2. Asia Session Range (00:00 - 08:00 UTC)
+        # Asia Session Range (ចន្លោះម៉ោង 00:00 - 08:00 UTC)
+        # ចំណាំ៖ ម៉ោងនេះអាចប្រែប្រួលបន្តិចបន្តួចតាមរដូវកាល ប៉ុន្តែជាទូទៅគឺម៉ោងនេះ
         asia_data = df.between_time('00:00', '08:00')
         asia_high = asia_data['High'].max() if not asia_data.empty else pdh
         asia_low = asia_data['Low'].min() if not asia_data.empty else pdl
 
-        # 3. Order Block (រកមើល Swing High/Low ចុងក្រោយ)
+        # Order Block (OB): រក Swing ចុងក្រោយក្នុងរយៈពេល ២ ថ្ងៃ (៤៨ ម៉ោង)
         supply_ob = df['High'].iloc[-48:-1].max()
         demand_ob = df['Low'].iloc[-48:-1].min()
 
+        current_price = df['Close'].iloc[-1]
+        prev_close = df['Close'].iloc[-2]
+        change_pct = ((current_price - prev_close) / prev_close) * 100
+
         return {
-            "price": df['Close'].iloc[-1],
+            "price": current_price,
             "pdh": pdh,
             "pdl": pdl,
             "asia_high": asia_high,
             "asia_low": asia_low,
             "supply_ob": supply_ob,
             "demand_ob": demand_ob,
-            "pct": ((df['Close'].iloc[-1] - df['Close'].iloc[-2]) / df['Close'].iloc[-2]) * 100
+            "pct": change_pct
         }
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"❌ Error fetching data: {e}")
         return None
 
 def send_msg(text, topic_id):
-    if not topic_id: return
+    if not topic_id or not TOKEN or not GROUP_ID:
+        print("❌ Missing Telegram configurations")
+        return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id}
-    requests.post(url, data=payload)
+    payload = {
+        "chat_id": GROUP_ID,
+        "text": text,
+        "parse_mode": "Markdown",
+        "message_thread_id": topic_id
+    }
+    try:
+        r = requests.post(url, data=payload)
+        print(f"📡 Sent to Topic {topic_id}: {r.json().get('ok')}")
+    except Exception as e:
+        print(f"❌ Error sending message: {e}")
 
 def main():
     data = get_smc_data()
-    if not data: return
+    if not data:
+        print("❌ Could not process SMC data")
+        return
     
-    price = data['price']
     kh_tz = pytz.timezone("Asia/Phnom_Penh")
     now_kh = datetime.now(kh_tz)
-    
-    # --- ១. ផ្ញើ REPORT តាម SESSION (8, 14, 19) ---
+    price = data['price']
+
+    # --- ៣. ការផ្ញើ REPORT តាម SESSION (ម៉ោង ៨, ១៤, ១៩) ---
     if now_kh.hour in [8, 14, 19] and now_kh.minute < 15:
         session = "🌏 ASIA" if now_kh.hour == 8 else "🇪🇺 LONDON" if now_kh.hour == 14 else "🇺🇸 NEW YORK"
+        
         report = (
-            f"📊 **{session} SESSION | SMC MAP**\n"
+            f"🎯 **{session} SESSION | SMC MAP**\n"
             f"📅 `{now_kh.strftime('%d/%m/%Y | %H:%M')}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n\n"
             f"💰 **Current Price:** `${price:,.2f}`\n\n"
-            f"🛑 **LIQUIDITY LEVELS**\n"
+            f"🛑 **LIQUIDITY LEVELS (Targets)**\n"
             f"• PDH (Prev. Day High): `${data['pdh']:,.2f}`\n"
             f"• PDL (Prev. Day Low): `${data['pdl']:,.2f}`\n"
-            f"• Asia High: `${data['asia_high']:,.2f}`\n"
-            f"• Asia Low: `${data['asia_low']:,.2f}`\n\n"
-            f"🧱 **SMC ZONES (OB)**\n"
-            f"• Supply OB: `${data['supply_ob']:,.2f}`\n"
-            f"• Demand OB: `${data['demand_ob']:,.2f}`\n\n"
-            f"⚡ **Bias:** {'🟢 Bullish' if data['pct'] > 0 else '🔴 Bearish'}"
+            f"• Asia High (BSL): `${data['asia_high']:,.2f}`\n"
+            f"• Asia Low (SSL): `${data['asia_low']:,.2f}`\n\n"
+            f"🧱 **INSTITUTIONAL ZONES (OB)**\n"
+            f"• Supply OB (Sell Zone): `${data['supply_ob']:,.2f}`\n"
+            f"• Demand OB (Buy Zone): `${data['demand_ob']:,.2f}`\n\n"
+            f"⚡ **Trend Bias:** {'🟢 Bullish' if data['pct'] > 0 else '🔴 Bearish'}\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"Generated by **Titanium321 AI** 🚀"
         )
         send_msg(report, TOPIC_ANALYSIS)
 
-    # --- ២. ប្រព័ន្ធ ALERT LIQUIDITY SWEEP (រត់រាល់ ១៥ នាទី) ---
+    # --- ៤. ប្រព័ន្ធ ALERT LIQUIDITY SWEEP (រត់រាល់ ១៥ នាទី) ---
     # ប្រាប់ពេលតម្លៃបំបែក PDH (Buyside Liquidity Taken)
     if price > data['pdh']:
-        alert = f"🚨 **LIQUIDITY ALERT: PDH SWEEP!**\nPrice is above Yesterday's High: `${price:,.2f}`\n*មើលសញ្ញា Reversal (Short) នៅតំបន់ Supply!*"
+        alert = f"🚨 **SMC ALERT: PDH SWEEP!**\n\nតម្លៃបានបំបែក High ម្សិលមិញ: `${price:,.2f}`\n⚠️ អាចជាការយក Liquidity (BSL)។ រង់ចាំមើលសញ្ញា Reversal!"
         send_msg(alert, TOPIC_ALERTS)
     
     # ប្រាប់ពេលតម្លៃបំបែក PDL (Sellside Liquidity Taken)
     elif price < data['pdl']:
-        alert = f"🚨 **LIQUIDITY ALERT: PDL SWEEP!**\nPrice is below Yesterday's Low: `${price:,.2f}`\n*មើលសញ្ញា Reversal (Long) នៅតំបន់ Demand!*"
+        alert = f"🚨 **SMC ALERT: PDL SWEEP!**\n\nតម្លៃបានបំបែក Low ម្សិលមិញ: `${price:,.2f}`\n⚠️ អាចជាការយក Liquidity (SSL)។ រង់ចាំមើលសញ្ញា Reversal!"
         send_msg(alert, TOPIC_ALERTS)
 
 if __name__ == "__main__":
