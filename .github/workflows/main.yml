@@ -2,24 +2,30 @@ name: Gold Auto Bot
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
-  workflow_dispatch:
+    - cron: '*/15 * * * *'  # រត់រាល់ ១៥ នាទីម្តង
+  workflow_dispatch:        # ប៊ូតុងសម្រាប់ចុច Run ដោយដៃ
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-      - run: pip install requests pytz
+
+      - name: Install dependencies
+        run: |
+          pip install requests pytz yfinance
+
       - name: Run bot.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          FINNHUB_TOKEN: ${{ secrets.FINNHUB_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
-          TOPIC_ANALYSIS: ${{ vars.TOPIC_ANALYSIS }}
-          TOPIC_ALERTS: ${{ vars.TOPIC_ALERTS }}
+          TOPIC_ANALYSIS: ${{ secrets.TOPIC_ANALYSIS }}
+          TOPIC_ALERTS: ${{ secrets.TOPIC_ALERTS }}
         run: python bot.py
         
