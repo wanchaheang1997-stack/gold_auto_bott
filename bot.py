@@ -1,6 +1,7 @@
 import requests
 import os
 import yfinance as yf
+import pandas as pd
 from datetime import datetime
 import pytz
 
@@ -9,110 +10,73 @@ TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = os.getenv('TELEGRAM_ID')
 TOPIC_ANALYSIS = os.getenv('TOPIC_ANALYSIS')
 TOPIC_ALERTS = os.getenv('TOPIC_ALERTS')
+HEADER_IMAGE_LINK = "ដាក់_LINK_រូបភាព_របស់_BRO_ទីនេះ"
 
-def get_smc_data():
+def get_market_data():
+    """ទាញយកទិន្នន័យពី Yahoo Finance ឱ្យបានគ្រប់ Timeframe"""
     try:
-        # ទាញយកទិន្នន័យមាស (GC=F) រយៈពេល ៥ ថ្ងៃ កម្រិត ១ ម៉ោង (1h)
         gold = yf.Ticker("GC=F")
-        df = gold.history(period="5d", interval="1h")
+        # ទាញយកទិន្នន័យ 5m (សម្រាប់ Alerts), 1h (សម្រាប់ OB), 1d (សម្រាប់ PDH/PWH)
+        df_5m = gold.history(period="3d", interval="5m")
+        df_1h = gold.history(period="7d", interval="1h")
+        df_1d = gold.history(period="60d", interval="1d")
         
-        if df.empty or len(df) < 24:
-            return None
-
-        # --- ២. គណនា Liquidity Levels (SMC Logic) ---
-        # PDH & PDL: រកតម្លៃខ្ពស់/ទាបបំផុតក្នុងចំណោម ២៤ ទៀនមុន (ម្សិលមិញ)
-        pdh = df['High'].iloc[-25:-1].max()
-        pdl = df['Low'].iloc[-25:-1].min()
-
-        # Asia Session Range (ចន្លោះម៉ោង 00:00 - 08:00 UTC)
-        # ចំណាំ៖ ម៉ោងនេះអាចប្រែប្រួលបន្តិចបន្តួចតាមរដូវកាល ប៉ុន្តែជាទូទៅគឺម៉ោងនេះ
-        asia_data = df.between_time('00:00', '08:00')
-        asia_high = asia_data['High'].max() if not asia_data.empty else pdh
-        asia_low = asia_data['Low'].min() if not asia_data.empty else pdl
-
-        # Order Block (OB): រក Swing ចុងក្រោយក្នុងរយៈពេល ២ ថ្ងៃ (៤៨ ម៉ោង)
-        supply_ob = df['High'].iloc[-48:-1].max()
-        demand_ob = df['Low'].iloc[-48:-1].min()
-
-        current_price = df['Close'].iloc[-1]
-        prev_close = df['Close'].iloc[-2]
-        change_pct = ((current_price - prev_close) / prev_close) * 100
-
-        return {
-            "price": current_price,
-            "pdh": pdh,
-            "pdl": pdl,
-            "asia_high": asia_high,
-            "asia_low": asia_low,
-            "supply_ob": supply_ob,
-            "demand_ob": demand_ob,
-            "pct": change_pct
-        }
+        if df_5m.empty or df_1h.empty or df_1d.empty:
+            return None, None, None
+        return df_5m, df_1h, df_1d
     except Exception as e:
         print(f"❌ Error fetching data: {e}")
-        return None
+        return None, None, None
 
-def send_msg(text, topic_id):
-    if not topic_id or not TOKEN or not GROUP_ID:
-        print("❌ Missing Telegram configurations")
-        return
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": GROUP_ID,
-        "text": text,
-        "parse_mode": "Markdown",
-        "message_thread_id": topic_id
-    }
+def send_telegram(text, topic_id, photo=None):
+    """មុខងារផ្ញើសារ (Text ឬ Photo) ទៅកាន់ Telegram"""
+    if not TOKEN or not GROUP_ID: return
+    
+    if photo:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendPhoto"
+        payload = {
+            "chat_id": GROUP_ID, "photo": photo, "caption": text, 
+            "parse_mode": "Markdown", "message_thread_id": topic_id
+        }
+    else:
+        url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+        payload = {
+            "chat_id": GROUP_ID, "text": text, 
+            "parse_mode": "Markdown", "message_thread_id": topic_id
+        }
+    
     try:
-        r = requests.post(url, data=payload)
-        print(f"📡 Sent to Topic {topic_id}: {r.json().get('ok')}")
+        requests.post(url, data=payload, timeout=10)
     except Exception as e:
-        print(f"❌ Error sending message: {e}")
+        print(f"❌ Connection Error: {e}")
 
 def main():
-    data = get_smc_data()
-    if not data:
-        print("❌ Could not process SMC data")
-        return
-    
     kh_tz = pytz.timezone("Asia/Phnom_Penh")
     now_kh = datetime.now(kh_tz)
-    price = data['price']
-
-    # --- ៣. ការផ្ញើ REPORT តាម SESSION (ម៉ោង ៨, ១៤, ១៩) ---
-    if now_kh.hour in [8, 14, 19] and now_kh.minute < 15:
-        session = "🌏 ASIA" if now_kh.hour == 8 else "🇪🇺 LONDON" if now_kh.hour == 14 else "🇺🇸 NEW YORK"
-        
-        report = (
-            f"🎯 **{session} SESSION | SMC MAP**\n"
-            f"📅 `{now_kh.strftime('%d/%m/%Y | %H:%M')}`\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"💰 **Current Price:** `${price:,.2f}`\n\n"
-            f"🛑 **LIQUIDITY LEVELS (Targets)**\n"
-            f"• PDH (Prev. Day High): `${data['pdh']:,.2f}`\n"
-            f"• PDL (Prev. Day Low): `${data['pdl']:,.2f}`\n"
-            f"• Asia High (BSL): `${data['asia_high']:,.2f}`\n"
-            f"• Asia Low (SSL): `${data['asia_low']:,.2f}`\n\n"
-            f"🧱 **INSTITUTIONAL ZONES (OB)**\n"
-            f"• Supply OB (Sell Zone): `${data['supply_ob']:,.2f}`\n"
-            f"• Demand OB (Buy Zone): `${data['demand_ob']:,.2f}`\n\n"
-            f"⚡ **Trend Bias:** {'🟢 Bullish' if data['pct'] > 0 else '🔴 Bearish'}\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"Generated by **Titanium321 AI** 🚀"
-        )
-        send_msg(report, TOPIC_ANALYSIS)
-
-    # --- ៤. ប្រព័ន្ធ ALERT LIQUIDITY SWEEP (រត់រាល់ ១៥ នាទី) ---
-    # ប្រាប់ពេលតម្លៃបំបែក PDH (Buyside Liquidity Taken)
-    if price > data['pdh']:
-        alert = f"🚨 **SMC ALERT: PDH SWEEP!**\n\nតម្លៃបានបំបែក High ម្សិលមិញ: `${price:,.2f}`\n⚠️ អាចជាការយក Liquidity (BSL)។ រង់ចាំមើលសញ្ញា Reversal!"
-        send_msg(alert, TOPIC_ALERTS)
     
-    # ប្រាប់ពេលតម្លៃបំបែក PDL (Sellside Liquidity Taken)
-    elif price < data['pdl']:
-        alert = f"🚨 **SMC ALERT: PDL SWEEP!**\n\nតម្លៃបានបំបែក Low ម្សិលមិញ: `${price:,.2f}`\n⚠️ អាចជាការយក Liquidity (SSL)។ រង់ចាំមើលសញ្ញា Reversal!"
-        send_msg(alert, TOPIC_ALERTS)
+    df_5m, df_1h, df_1d = get_market_data()
+    if df_5m is None: return
 
-if __name__ == "__main__":
-    main()
+    price = df_5m['Close'].iloc[-1]
+
+    # --- ២. គណនា Key Levels ឱ្យបានច្បាស់លាស់ (Roadmap to A+) ---
+    # External Liquidity
+    pdh = df_1d['High'].iloc[-2] # ទៀនថ្ងៃម្សិលមិញ
+    pdl = df_1d['Low'].iloc[-2]
+    pwh = df_1d['High'].iloc[-10:-1].max() # High នៃសប្តាហ៍មុន
+    pwl = df_1d['Low'].iloc[-10:-1].min()
+    
+    # Internal / Session Liquidity (Asia Range: 07:00 - 14:00 KH)
+    asia = df_5m.between_time('00:00', '07:00') # UTC 00:00-07:00 = KH 07:00-14:00
+    asia_h = asia['High'].max() if not asia.empty else None
+    asia_l = asia['Low'].min() if not asia.empty else None
+
+    # SMC Zones (Order Blocks)
+    supply_ob = df_1h['High'].iloc[-48:-1].max()
+    demand_ob = df_1h['Low'].iloc[-48:-1].min()
+
+    # --- ៣. ផ្ញើ REPORT តាម SESSION (Analysis Topic) ---
+    # កំណត់ម៉ោងផ្ញើ ៨ព្រឹក, ២រសៀល, ៧យប់
+    if now_kh.hour in [8, 14, 19] and now_kh.minute < 10:
+        session = "🌏 ASIA" if now_kh.hour == 8 else "🇪🇺 LONDON" if now_kh.hour
         
