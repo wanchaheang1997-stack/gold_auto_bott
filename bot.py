@@ -3,13 +3,13 @@ import os
 from datetime import datetime
 import pytz
 
-# ទាញយក Token ពី GitHub Secret
+# ព័ត៌មានបច្ចេកទេស
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = "-1003709011282"
 TOPIC_ANALYSIS = "8"
 TOPIC_ALERTS = "18"
 
-# --- កំណត់ Key Zones សម្រាប់ថ្ងៃនេះ (បងអាចឱ្យខ្ញុំកែលេខនេះរាល់ព្រឹក) ---
+# --- កំណត់ Key Zones សម្រាប់ថ្ងៃនេះ (បងកែលេខនេះរាល់ព្រឹក) ---
 RESISTANCE = 4510.0
 SUPPORT = 4380.0
 
@@ -22,13 +22,7 @@ def get_oanda_data():
 
 def send_msg(text, topic_id):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": GROUP_ID, 
-        "text": text, 
-        "parse_mode": "Markdown", 
-        "message_thread_id": topic_id, 
-        "disable_web_page_preview": True
-    }
+    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id, "disable_web_page_preview": True}
     requests.post(url, data=payload)
 
 def main():
@@ -39,8 +33,9 @@ def main():
     kh_tz = pytz.timezone("Asia/Phnom_Penh")
     kh_time = datetime.now(kh_tz)
 
-    # ១. របាយការណ៍វិភាគ (រត់នៅម៉ោង ៨:០០ ព្រឹក)
-    if kh_time.hour == 8 and kh_time.minute < 20:
+    # --- ១. ទម្រង់ Report ថ្មី (ឆែកម៉ោង ៨ ព្រឹក) ---
+    # បើម៉ោងនៅស្រុកខ្មែរ ចន្លោះពី ៨:០០ ដល់ ៩:០០ ព្រឹក វានឹងផ្ញើ Report នេះ
+    if kh_time.hour == 8:
         report = (
             f"📊 **Titanium321 | របាយការណ៍វិភាគមាស**\n"
             f"📅 ថ្ងៃទី {kh_time.strftime('%d %m %Y')}\n"
@@ -59,11 +54,11 @@ def main():
         )
         send_msg(report, TOPIC_ANALYSIS)
 
-    # ២. Alert តម្លៃ (រត់រាល់ ១៥ នាទីម្តង បើតម្លៃដល់ Zone)
+    # --- ២. ទម្រង់ Alert តម្លៃ (រត់រាល់ ១៥ នាទីម្តង) ---
     if price <= SUPPORT:
-        send_msg(f"🚨 **Titanium321 | BUY ALERT!**\n💰 តម្លៃដល់ Support: **${price:,.2f}**\n👉 ពិនិត្យមើល Price Action មុនចូល!", TOPIC_ALERTS)
+        send_msg(f"🚨 **Titanium321 | BUY ALERT!**\n💰 តម្លៃដល់ Support: **${price:,.2f}**\n👉 ពិនិត្យមើល Price Action!", TOPIC_ALERTS)
     elif price >= RESISTANCE:
-        send_msg(f"🚨 **Titanium321 | SELL ALERT!**\n💰 តម្លៃដល់ Resistance: **${price:,.2f}**\n👉 ពិនិត្យមើល Price Action មុនចូល!", TOPIC_ALERTS)
+        send_msg(f"🚨 **Titanium321 | SELL ALERT!**\n💰 តម្លៃដល់ Resistance: **${price:,.2f}**\n👉 ពិនិត្យមើល Price Action!", TOPIC_ALERTS)
 
 if __name__ == "__main__":
     main()
