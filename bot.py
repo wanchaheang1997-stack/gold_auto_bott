@@ -3,53 +3,34 @@ import os
 from datetime import datetime
 import pytz
 
-# --- Configuration (ប្រើ ID ដែលបងរកឃើញ) ---
+# --- បងដាក់ TOKEN និង GROUP_ID ធម្មតា ---
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = os.getenv('TELEGRAM_ID')
-TOPIC_ANALYSIS = os.getenv('TOPIC_ANALYSIS') # លេខ 8
-TOPIC_ALERTS = os.getenv('TOPIC_ALERTS')     # លេខ 18
+
+# --- សរសេរលេខ ID ផ្ទាល់ចូលក្នុងកូដតែម្តង ដើម្បីកុំឱ្យច្រឡំជាមួយ Secrets ---
+TOPIC_ANALYSIS_ID = 8   # លេខ 8 តាម Link ដែលបងផ្ញើមក
+TOPIC_ALERTS_ID = 18    # លេខ 18 តាម Link ដែលបងផ្ញើមក
 
 def send_telegram(text, topic_id):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id}
-    requests.post(url, data=payload)
+    payload = {
+        "chat_id": GROUP_ID, 
+        "text": text, 
+        "parse_mode": "Markdown", 
+        "message_thread_id": topic_id
+    }
+    response = requests.post(url, data=payload)
+    print(f"Sent to Topic {topic_id}: {response.json()}")
 
 def main():
     kh_tz = pytz.timezone("Asia/Phnom_Penh")
     now_kh = datetime.now(kh_tz)
-
-    # --- ព័ត៌មានទីផ្សារពិតប្រាកដ (Current Market Data) ---
-    live_price = 4432.90
-    pdh = 4475.20  # Previous Day High (26 Mar)
-    pdl = 4375.80  # Previous Day Low (26 Mar)
     
-    # ១. ផ្ញើរបាយការណ៍ទៅ Topic Analysis (ID: 8)
-    report = (
-        f"📊 **XAU/USD SMC MASTER ANALYSIS**\n"
-        f"📅 `{now_kh.strftime('%d %b %Y | %H:%M')}`\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 **Live Price:** `${live_price:,.2f}`\n\n"
-        f"🏗️ **HTF STRUCTURE (H1):** `Bearish 📉`\n"
-        f"💡 **Bias:** ទីផ្សារកំពុងស្ថិតក្នុងដំណាក់កាល Correction បន្ទាប់ពីធ្លាក់ពី $5,500។\n\n"
-        f"🎯 **KEY LIQUIDITY LEVELS**\n"
-        f"• **BSL (PDH):** `${pdh:,.2f}`\n"
-        f"• **SSL (PDL):** `${pdl:,.2f}`\n\n"
-        f"🌍 **MACRO FOCUS (NY SESSION)**\n"
-        f"🔴 21:00 - Michigan Consumer Sentiment (Final)\n"
-        f"⚠️ *Note: តម្លៃកំពុងទាក់ទាញមករក PDL ($4,375) ដើម្បីយក SSL មុននឹងងើបឡើងវិញ។*"
-        f"\n━━━━━━━━━━━━━━━━━━━━"
-    )
-    send_telegram(report, TOPIC_ANALYSIS)
-
-    # ២. ផ្ញើសារតេស្តទៅ Topic Alerts (ID: 18)
-    alert_test = (
-        f"🚨 **SMC ALERT SYSTEM: ONLINE**\n"
-        f"🔥 ស្ថានភាព៖ កំពុងស្កែនរកការទម្លុះ PDH/PDL...\n"
-        f"📈 PDH Target: `${pdh:,.2f}`\n"
-        f"📉 PDL Target: `${pdl:,.2f}`\n"
-        f"✅ បើបងឃើញសារនេះ មានន័យថា ID 18 ដើរត្រឹមត្រូវហើយ!"
-    )
-    send_telegram(alert_test, TOPIC_ALERTS)
+    # ១. ផ្ញើទៅ Analysis (Topic ID: 8)
+    send_telegram(f"✅ **TEST Analysis Topic (ID: 8)**\n⏰ ម៉ោង៖ `{now_kh.strftime('%H:%M:%S')}`", TOPIC_ANALYSIS_ID)
+    
+    # ២. ផ្ញើទៅ Alerts (Topic ID: 18)
+    send_telegram(f"🚨 **TEST Alerts Topic (ID: 18)**\n🔥 ប្រសិនបើសារនេះលោតចូល Topic 2.Alert គឺជោគជ័យហើយ!", TOPIC_ALERTS_ID)
 
 if __name__ == "__main__":
     main()
