@@ -2,18 +2,18 @@ name: Gold Auto Bot
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # ឱ្យវារត់រាល់ ១៥ នាទីម្តង
-  workflow_dispatch: # សម្រាប់ឱ្យបងចុច Run ដោយដៃបាន
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: ambassadors/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
