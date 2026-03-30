@@ -2,7 +2,7 @@ name: XAUUSD Institutional Analysis
 
 on:
   schedule:
-    # Run រាល់ដើមម៉ោងនៅកម្ពុជា (UTC+7)
+    # ម៉ោងនៅកម្ពុជា (UTC+7)
     # 01:00 UTC = 08:00 AM KH (Asia Session)
     # 07:00 UTC = 02:00 PM KH (London Session)
     # 12:00 UTC = 07:00 PM KH (NY Session)
