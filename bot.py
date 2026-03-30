@@ -1,114 +1,106 @@
+import os
 import yfinance as yf
 import pandas as pd
-import numpy as np
-import os
 import requests
 from datetime import datetime
-import pytz
 
-# --- Configuration ---
-TOKEN = os.getenv('TELEGRAM_TOKEN')
-GROUP_ID = os.getenv('TELEGRAM_ID')
-TOPIC_ANALYSIS = 8
-TOPIC_ALERTS = 18
+# --- ទាញយកតម្លៃពី GitHub Secrets ---
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_ID")
 
-def get_session_name(hour):
-    if 8 <= hour < 14: return "🇯🇵 Asia Session"
-    if 14 <= hour < 19: return "🇬🇧 London Session"
-    if 19 <= hour < 23: return "🇺🇸 New York Session"
-    return "🌑 Off-Session"
+# --- កំណត់ Topic IDs (Thread IDs) ---
+TOPIC_ANALYSIS = 8   # សម្រាប់ Daily Report
+TOPIC_ALERTS = 18    # សម្រាប់ SMC Smart Alerts
 
-def calculate_market_intelligence(df):
-    """គណនា Volume Flow & Smart Money Detection"""
-    change = df['Close'].diff()
-    buy_v = df['Volume'][change > 0].sum()
-    sell_v = df['Volume'][change < 0].sum()
-    buy_p = (buy_v / (buy_v + sell_v) * 100) if (buy_v + sell_v) > 0 else 50
-    
-    vol_sma = df['Volume'].rolling(20).mean().iloc[-1]
-    curr_vol = df['Volume'].iloc[-1]
-    manipulation = "⚠️ HIGH CAUTION" if curr_vol > vol_sma * 1.8 else "Low / Normal"
-    
-    short_ema = df['Close'].ewm(span=12).mean().iloc[-1]
-    long_ema = df['Close'].ewm(span=26).mean().iloc[-1]
-    trend = "Aggressive Bearish 📉" if short_ema < long_ema else "Bullish Momentum 📈"
-    
-    return round(buy_p, 1), manipulation, trend
-
-def calculate_volume_profile(df):
-    """រក POC, VAH, VAL (Key Volume Zones)"""
-    price_min, price_max = df['Low'].min(), df['High'].max()
-    bins = np.linspace(price_min, price_max, 20)
-    vbp, _ = np.histogram(df['Close'], bins=bins, weights=df['Volume'])
-    poc = (bins[np.argmax(vbp)] + bins[np.argmax(vbp)+1]) / 2
-    vah, val = bins[-3], bins[2]
-    return poc, vah, val
-
-def main():
-    kh_tz = pytz.timezone("Asia/Phnom_Penh")
-    now_kh = datetime.now(kh_tz)
-    if now_kh.weekday() >= 5: return 
-
-    gold = yf.Ticker("GC=F")
-    df_h1 = gold.history(period="15d", interval="1h")
-    if df_h1.empty: return
-
-    # គណនា Metrics សម្រាប់ Dashboard
-    buy_p, manipulation, trend_status = calculate_market_intelligence(df_h1)
-    poc, vah, val = calculate_volume_profile(df_h1)
-    
-    price = df_h1['Close'].iloc[-1]
-    daily_high = df_h1['High'].iloc[-24:].max()
-    daily_low = df_h1['Low'].iloc[-24:].min()
-    daily_change = ((price - df_h1['Open'].iloc[-24]) / df_h1['Open'].iloc[-24]) * 100
-
-    # --- FULL INSTITUTIONAL REPORT WITH YOUR SPECIFIC STYLE ---
-    report = (
-        f"📊 **របាយការណ៍វិភាគមាសប្រចាំថ្ងៃ (XAU/USD)**\n"
-        f"*{get_session_name(now_kh.hour)} | {now_kh.strftime('%d %B %Y')}*\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 **Live Price:** `${price:,.2f}` ({daily_change:+.2f}%)\n"
-        f"🎯 **Today's Range:** `${daily_low:,.2f}` - `${daily_high:,.2f}`\n\n"
-        
-        f"🧠 **MARKET INTELLIGENCE DASHBOARD**\n"
-        f"• **Trend Status:** `{trend_status}`\n"
-        f"• **Volume Flow:** 🐂 `{buy_p}%` | 🐻 `{100-buy_p}%`\n"
-        f"• **Smart Money:** `{manipulation}`\n"
-        f"• **Momentum:** `{'Strongly Negative' if buy_p < 45 else 'Positive'}`\n\n"
-        
-        f"🏗️ **SMC & VOLUME ZONES (1H)**\n"
-        f"• **POC (Fair Value):** `${poc:,.2f}`\n"
-        f"• **VAH (Resistance):** `${vah:,.2f}`\n"
-        f"• **VAL (Support):** `${val:,.2f}`\n\n"
-        
-        f"🌍 **១. ស្ថានភាព MACRO & ព័ត៌មាន (FUNDAMENTAL)**\n"
-        f"📊 **និន្នាការ៖** `{trend_status}`\n"
-        f"ទីផ្សារមាសកំពុងរងសម្ពាធខ្លាំងពីវិបត្តិថាមពលសកល និងជម្លោះភូមិសាស្ត្រនយោបាយ។ "
-        f"សញ្ញា `{manipulation}` បង្ហាញពីសកម្មភាពស្ថាប័នធំៗក្នុងតំបន់ Premium។\n\n"
-        
-        f"🎯 **២. INTRADAY EXECUTION ROADMAP**\n"
-        f"🗺️ **Key Zones (Reference):**\n"
-        f"• Supply Zone: `${vah:,.2f}` (រង់ចាំ SELL)\n"
-        f"• Major Demand: `${val:,.2f}` (កម្រិតចិត្តសាស្ត្រ)\n\n"
-        
-        f"⚡ **TRADE SCENARIOS**\n"
-        f"🅰️ **Scenario A (High Prob):** រង់ចាំតម្លៃទាញត្រឡប់ទៅ `${poc:,.1f}` រួចបង្កើត M5 CHoCH ដើម្បីបន្តនិន្នាការចុះ។\n"
-        f"🅱️ **Scenario B (Scalp):** ប្រសិនបើតម្លៃ Sweep `${daily_low:,.1f}` (LSL) អាចមាន Scalp Buy បណ្តោះអាសន្ន។\n\n"
-        
-        f"⚠️ **៣. ការគ្រប់គ្រងហានិភ័យ (RISK MANAGEMENT)**\n"
-        f"• **Killzones:** ផ្ដោតលើវគ្គ NY សម្រាប់ Volatility ខ្ពស់។\n"
-        f"• **Risk:** រក្សាការ Risk ត្រឹម 1% ប៉ុណ្ណោះ។\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"Generated by Your AI Assistant 🚀 | 📌 *Educational Purpose Only*"
-    )
-    
-    send_telegram(report, TOPIC_ANALYSIS)
+SYMBOL = "GC=F" # XAU/USD Gold Futures (YFinance)
 
 def send_telegram(text, topic_id):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id}
-    requests.post(url, data=payload)
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": text,
+        "parse_mode": "Markdown",
+        "message_thread_id": topic_id
+    }
+    try:
+        r = requests.post(url, json=payload)
+        return r.json()
+    except Exception as e:
+        print(f"❌ Telegram Error: {e}")
+
+class SMCLogic:
+    @staticmethod
+    def fetch_data(interval):
+        return yf.download(SYMBOL, period="2d", interval=interval, progress=False)
+
+    @staticmethod
+    def detect_sfp(df):
+        """ស្វែងរក Liquidity Sweep (SFP) នៅលើ M15"""
+        if len(df) < 20: return None
+        last = df.iloc[-1]
+        lookback = df.iloc[-25:-2] 
+        p_high, p_low = lookback['High'].max(), lookback['Low'].min()
+
+        # Bearish SFP (Sweep High)
+        if last['High'] > p_high and last['Close'] < p_high:
+            return {"type": "SFP (BSL Swept)", "level": p_high, "bias": "SELL"}
+        # Bullish SFP (Sweep Low)
+        if last['Low'] < p_low and last['Close'] > p_low:
+            return {"type": "SFP (SSL Swept)", "level": p_low, "bias": "BUY"}
+        return None
+
+    @staticmethod
+    def get_market_bias(df):
+        """រកមើលតំបន់ Premium/Discount"""
+        high = df['High'].iloc[-40:].max()
+        low = df['Low'].iloc[-40:].min()
+        mid = (high + low) / 2
+        current = df['Close'].iloc[-1]
+        return "Premium (Sell Zone)" if current > mid else "Discount (Buy Zone)"
+
+def run_bot():
+    smc = SMCLogic()
+    
+    # 1. ទាញទិន្នន័យ (H1 សម្រាប់ Structure, M15 សម្រាប់ Sweep)
+    df_h1 = smc.fetch_data("1h")
+    df_m15 = smc.fetch_data("15m")
+    
+    if df_h1.empty or df_m15.empty:
+        print("❌ No data fetched")
+        return
+
+    current_price = df_h1['Close'].iloc[-1]
+    market_bias = smc.get_market_bias(df_h1)
+
+    # --- ផ្នែកទី ១: ផ្ញើ REPORT ទៅ Topic 8 ---
+    report_text = (
+        f"📊 *XAUUSD INSTITUTIONAL ANALYSIS*\n"
+        f"————————————————\n"
+        f"🇰🇭 *របាយការណ៍ទីផ្សារមាស (Session Update)*\n"
+        f"• តម្លៃបច្ចុប្បន្ន: `${current_price:.2f}`\n"
+        f"• Market Bias: *{market_bias}*\n"
+        f"• Session Time: {datetime.now().strftime('%H:%M')} (GMT+7)\n\n"
+        f"💡 *SMC Note:* តម្លៃកំពុងស្ថិតក្នុងតំបន់ {market_bias}។ "
+        f"រង់ចាំការធ្វើ Liquidity Sweep មុននឹងសម្រេចចិត្តចូល Order។"
+    )
+    send_telegram(report_text, TOPIC_ANALYSIS)
+
+    # --- ផ្នែកទី ២: ឆែករក ALERT ទៅ Topic 18 ---
+    setup = smc.detect_sfp(df_m15)
+    if setup:
+        # បញ្ជាក់បន្ថែមជាមួយ Market Bias (Sell តែនៅ Premium, Buy តែនៅ Discount)
+        if (setup['bias'] == "SELL" and "Premium" in market_bias) or \
+           (setup['bias'] == "BUY" and "Discount" in market_bias):
+            alert_text = (
+                f"🚨 *XAUUSD SMART ALERT*\n\n"
+                f"*Type:* {setup['type']}\n"
+                f"*Bias:* {setup['bias']} 🔴\n"
+                f"*Key Level:* ${setup['level']:.2f}\n\n"
+                f"💬 *Institutional Comment:* តម្លៃបានធ្វើការ Sweep Liquidity រួចរាល់ក្នុងតំបន់ {market_bias}។ "
+                f"សូមរង់ចាំមើល M5 CHoCH ឬ Rejection candle មុននឹងចូល Entry។"
+            )
+            send_telegram(alert_text, TOPIC_ALERTS)
 
 if __name__ == "__main__":
-    main()
+    run_bot()
     
