@@ -2,12 +2,8 @@ name: XAUUSD Institutional Analysis
 
 on:
   schedule:
-    # ម៉ោងនៅកម្ពុជា (UTC+7)
-    # 01:00 UTC = 08:00 AM KH (Asia Session)
-    # 07:00 UTC = 02:00 PM KH (London Session)
-    # 12:00 UTC = 07:00 PM KH (NY Session)
     - cron: '0 1,7,12 * * 1-5'
-  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run តេស្តដោយផ្ទាល់
+  workflow_dispatch:
 
 jobs:
   build:
@@ -23,8 +19,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install yfinance pandas numpy requests pytz
+          pip install yfinance pandas requests numpy pytz
 
       - name: Run Analysis Bot
         env:
