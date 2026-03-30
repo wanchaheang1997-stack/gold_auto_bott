@@ -1,28 +1,37 @@
-name: XAUUSD Institutional Analysis
+name: XAUUSD Institutional Bot V2
 
 on:
   schedule:
-    - cron: '0 1,7,12 * * 1-5'
-  workflow_dispatch:
+    # Run រៀងរាល់ ៥ នាទីម្តង (ចាប់ពីថ្ងៃច័ន្ទ ដល់ សុក្រ)
+    # នេះជាល្បឿនលឿនបំផុតដែល GitHub Free អាចធ្វើបានសម្រាប់ Real-time Alerts
+    - cron: '*/5 * * * 1-5'
+  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run តេស្តដោយដៃ
 
 jobs:
-  build:
+  run-trading-bot:
     runs-on: ubuntu-latest
+    
+    # បន្ថែម timeout ដើម្បីការពារការជាប់គាំង (កុំឱ្យលើស ៥ នាទី)
+    timeout-minutes: 5
+
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+          cache: 'pip' # ប្រើ Cache ដើម្បីឱ្យវា Install dependencies លឿនជាងមុន
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
-          pip install yfinance pandas requests numpy pytz
+          python -m pip install --upgrade pip
+          pip install yfinance pandas numpy requests pytz
 
-      - name: Run Analysis Bot
+      - name: Execute SMC Bot
         env:
+          # ប្រាកដថាបងបានដាក់ Secrets ទាំងនេះក្នុង GitHub Settings រួចរាល់
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
         run: python bot.py
