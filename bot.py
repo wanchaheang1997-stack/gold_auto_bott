@@ -1,106 +1,156 @@
-import os
 import yfinance as yf
 import pandas as pd
+import numpy as np
+import os
 import requests
+import pytz
+import time
 from datetime import datetime
 
-# --- ទាញយកតម្លៃពី GitHub Secrets ---
-TOKEN = os.getenv("TELEGRAM_TOKEN")
-CHAT_ID = os.getenv("TELEGRAM_ID")
+# ========================================
+# ⚙️ CONFIGURATION (ដាក់ Secret របស់បងនៅទីនេះ)
+# ========================================
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+GROUP_ID = os.getenv('TELEGRAM_ID')
+TOPIC_ANALYSIS = 8   # Daily Reports
+TOPIC_ALERTS = 18    # High Prob Alerts
+TIMEZONE = "Asia/Phnom_Penh"
 
-# --- កំណត់ Topic IDs (Thread IDs) ---
-TOPIC_ANALYSIS = 8   # សម្រាប់ Daily Report
-TOPIC_ALERTS = 18    # សម្រាប់ SMC Smart Alerts
+# ========================================
+# 📊 DATA FETCHING & SMC LOGIC
+# ========================================
+def get_data(symbol="GC=F"):
+    ticker = yf.Ticker(symbol)
+    df_h1 = ticker.history(period="10d", interval="1h")
+    df_m15 = ticker.history(period="5d", interval="15m")
+    df_m5 = ticker.history(period="2d", interval="5m")
+    return df_h1, df_m15, df_m5
 
-SYMBOL = "GC=F" # XAU/USD Gold Futures (YFinance)
+def detect_smc_setup(df_h1, df_m15, df_m5):
+    """
+    Step 1: Liquidity Sweep / SFP (H1/M15)
+    Step 2: Confirmation (FVG/CHoCH) on M5
+    """
+    price = df_m5['Close'].iloc[-1]
+    prev_h1_high = df_h1['High'].iloc[-2]
+    prev_h1_low = df_h1['Low'].iloc[-2]
+    
+    setup_type = None
+    bias = None
+    
+    # 1. Detect Sweep/SFP
+    if price > prev_h1_high:
+        setup_type = "BSL Sweep / SFP 🔴"
+        bias = "SELL"
+    elif price < prev_h1_low:
+        setup_type = "SSL Sweep / SFP 🟢"
+        bias = "BUY"
+    
+    if not setup_type: return None
 
+    # 2. M5 Confirmation (FVG & CHoCH)
+    # FVG Detection
+    last_3 = df_m5.tail(3)
+    fvg = (last_3['Low'].iloc[-1] > last_3['High'].iloc[-3]) or (last_3['High'].iloc[-1] < last_3['Low'].iloc[-3])
+    
+    # CHoCH (Structure Shift)
+    recent_high = df_m5['High'].iloc[-10:-1].max()
+    recent_low = df_m5['Low'].iloc[-10:-1].min()
+    choch = (price > recent_high) if bias == "BUY" else (price < recent_low)
+
+    if fvg or choch:
+        return {
+            "type": setup_type,
+            "bias": bias,
+            "level": prev_h1_high if bias == "SELL" else prev_h1_low,
+            "conf": "FVG" if fvg else "CHoCH",
+            "entry": price
+        }
+    return None
+
+# ========================================
+# 🧠 INTELLIGENCE & ANALYSIS
+# ========================================
+def get_market_intelligence(df_h1):
+    change = df_h1['Close'].diff()
+    buy_v = df_h1['Volume'][change > 0].sum()
+    sell_v = df_h1['Volume'][change < 0].sum()
+    buy_p = (buy_v / (buy_v + sell_v) * 100) if (buy_v + sell_v) > 0 else 50
+    
+    vol_sma = df_h1['Volume'].rolling(20).mean().iloc[-1]
+    curr_vol = df_h1['Volume'].iloc[-1]
+    manipulation = "⚠️ HIGH" if curr_vol > vol_sma * 1.8 else "Low"
+    
+    return round(buy_p, 1), manipulation
+
+# ========================================
+# 🤖 TELEGRAM ACTIONS
+# ========================================
 def send_telegram(text, topic_id):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": text,
-        "parse_mode": "Markdown",
-        "message_thread_id": topic_id
-    }
-    try:
-        r = requests.post(url, json=payload)
-        return r.json()
-    except Exception as e:
-        print(f"❌ Telegram Error: {e}")
+    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id}
+    try: requests.post(url, data=payload, timeout=10)
+    except Exception as e: print(f"Error: {e}")
 
-class SMCLogic:
-    @staticmethod
-    def fetch_data(interval):
-        return yf.download(SYMBOL, period="2d", interval=interval, progress=False)
+# ========================================
+# 🚀 MAIN RUNNER (SCHEDULER & LOOP)
+# ========================================
+last_alert_id = None
 
-    @staticmethod
-    def detect_sfp(df):
-        """ស្វែងរក Liquidity Sweep (SFP) នៅលើ M15"""
-        if len(df) < 20: return None
-        last = df.iloc[-1]
-        lookback = df.iloc[-25:-2] 
-        p_high, p_low = lookback['High'].max(), lookback['Low'].min()
-
-        # Bearish SFP (Sweep High)
-        if last['High'] > p_high and last['Close'] < p_high:
-            return {"type": "SFP (BSL Swept)", "level": p_high, "bias": "SELL"}
-        # Bullish SFP (Sweep Low)
-        if last['Low'] < p_low and last['Close'] > p_low:
-            return {"type": "SFP (SSL Swept)", "level": p_low, "bias": "BUY"}
-        return None
-
-    @staticmethod
-    def get_market_bias(df):
-        """រកមើលតំបន់ Premium/Discount"""
-        high = df['High'].iloc[-40:].max()
-        low = df['Low'].iloc[-40:].min()
-        mid = (high + low) / 2
-        current = df['Close'].iloc[-1]
-        return "Premium (Sell Zone)" if current > mid else "Discount (Buy Zone)"
-
-def run_bot():
-    smc = SMCLogic()
+def run_system():
+    global last_alert_id
+    kh_tz = pytz.timezone(TIMEZONE)
+    now_kh = datetime.now(kh_tz)
     
-    # 1. ទាញទិន្នន័យ (H1 សម្រាប់ Structure, M15 សម្រាប់ Sweep)
-    df_h1 = smc.fetch_data("1h")
-    df_m15 = smc.fetch_data("15m")
-    
-    if df_h1.empty or df_m15.empty:
-        print("❌ No data fetched")
-        return
+    # 1. Fetch Data
+    df_h1, df_m15, df_m5 = get_data()
+    if df_h1.empty: return
 
-    current_price = df_h1['Close'].iloc[-1]
-    market_bias = smc.get_market_bias(df_h1)
+    # 2. Daily Report Logic (Topic 8)
+    # ចេញនៅនាទីទី 0 ដល់ 10 នៃម៉ោង 8, 14, 19
+    if now_kh.hour in [8, 14, 19] and now_kh.minute < 10:
+        buy_p, manipulation = get_market_intelligence(df_h1)
+        report = (
+            f"📊 **REPORT វិភាគមាស (XAU/USD)**\n"
+            f"⏰ `{now_kh.strftime('%H:%M')} (Cambodia)`\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🧠 **MARKET INTELLIGENCE**\n"
+            f"• Buy Pressure: `{buy_p}%`\n"
+            f"• Smart Money: `{manipulation}`\n"
+            f"• Trend: `{'Bullish 🐂' if buy_p > 50 else 'Bearish 🐻'}`\n\n"
+            f"🏗️ **SMC CONTEXT**\n"
+            f"• PDH/PDL: `${df_h1['High'].iloc[-24:].max():,.2f}` / `${df_h1['Low'].iloc[-24:].min():,.2f}`\n"
+            f"• Current: `${df_m5['Close'].iloc[-1]:,.2f}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━"
+        )
+        send_telegram(report, TOPIC_ANALYSIS)
+        time.sleep(600) # កុំឱ្យវាផ្ញើដដែលៗក្នុងរយៈពេល ១០នាទីនេះ
 
-    # --- ផ្នែកទី ១: ផ្ញើ REPORT ទៅ Topic 8 ---
-    report_text = (
-        f"📊 *XAUUSD INSTITUTIONAL ANALYSIS*\n"
-        f"————————————————\n"
-        f"🇰🇭 *របាយការណ៍ទីផ្សារមាស (Session Update)*\n"
-        f"• តម្លៃបច្ចុប្បន្ន: `${current_price:.2f}`\n"
-        f"• Market Bias: *{market_bias}*\n"
-        f"• Session Time: {datetime.now().strftime('%H:%M')} (GMT+7)\n\n"
-        f"💡 *SMC Note:* តម្លៃកំពុងស្ថិតក្នុងតំបន់ {market_bias}។ "
-        f"រង់ចាំការធ្វើ Liquidity Sweep មុននឹងសម្រេចចិត្តចូល Order។"
-    )
-    send_telegram(report_text, TOPIC_ANALYSIS)
-
-    # --- ផ្នែកទី ២: ឆែករក ALERT ទៅ Topic 18 ---
-    setup = smc.detect_sfp(df_m15)
+    # 3. Real-time Alert Logic (Topic 18)
+    setup = detect_smc_setup(df_h1, df_m15, df_m5)
     if setup:
-        # បញ្ជាក់បន្ថែមជាមួយ Market Bias (Sell តែនៅ Premium, Buy តែនៅ Discount)
-        if (setup['bias'] == "SELL" and "Premium" in market_bias) or \
-           (setup['bias'] == "BUY" and "Discount" in market_bias):
-            alert_text = (
-                f"🚨 *XAUUSD SMART ALERT*\n\n"
-                f"*Type:* {setup['type']}\n"
-                f"*Bias:* {setup['bias']} 🔴\n"
-                f"*Key Level:* ${setup['level']:.2f}\n\n"
-                f"💬 *Institutional Comment:* តម្លៃបានធ្វើការ Sweep Liquidity រួចរាល់ក្នុងតំបន់ {market_bias}។ "
-                f"សូមរង់ចាំមើល M5 CHoCH ឬ Rejection candle មុននឹងចូល Entry។"
+        alert_id = f"{setup['type']}_{setup['entry']}"
+        if alert_id != last_alert_id:
+            alert_msg = (
+                f"🚨 **XAUUSD SMART ALERT**\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🔹 **Type:** `{setup['type']}`\n"
+                f"📍 **Key Level:** `${setup['level']:,.2f}`\n\n"
+                f"✅ **Confirmation:** `{setup['conf']} Detected`\n"
+                f"💰 **Entry:** `${setup['entry']:,.2f}`\n"
+                f"🎯 **Bias:** `{setup['bias']}`\n\n"
+                f"💬 *Short Note:* Price swept liquidity at key level and showed displacement. High probability setup.*"
+                f"\n━━━━━━━━━━━━━━━━━━━━"
             )
-            send_telegram(alert_text, TOPIC_ALERTS)
+            send_telegram(alert_msg, TOPIC_ALERTS)
+            last_alert_id = alert_id
 
 if __name__ == "__main__":
-    run_bot()
-    
+    print("🚀 Bot is starting with Asia/Phnom_Penh Timezone...")
+    while True:
+        try:
+            run_system()
+        except Exception as e:
+            print(f"Error in loop: {e}")
+        time.sleep(60) # ឆែករាល់ ១ នាទី
+        
