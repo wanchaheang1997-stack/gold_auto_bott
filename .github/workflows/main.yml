@@ -1,37 +1,36 @@
-name: XAUUSD Institutional Bot V2
+name: XAUUSD Supreme Intelligence V5
 
 on:
   schedule:
-    # ឱ្យ GitHub Actions ដាស់ Bot ឱ្យភ្ញាក់រៀងរាល់ ៥ នាទីម្តង (ច័ន្ទ-សុក្រ)
-    # វានឹងរត់ស្វ័យប្រវត្តិតាមម៉ោងកម្ពុជាដែលយើងកំណត់ក្នុង bot.py
+    # ដាស់ Bot ឱ្យភ្ញាក់រៀងរាល់ ៥ នាទីម្តង (ច័ន្ទ-សុក្រ)
     - cron: '*/5 * * * 1-5'
-  workflow_dispatch: # សម្រាប់ឱ្យបងចុចប៊ូតុង Run តេស្តដោយដៃបានគ្រប់ពេល
+  workflow_dispatch: # សម្រាប់ឱ្យបងចុច Run តេស្តដោយដៃបានគ្រប់ពេល
 
 jobs:
   run-trading-bot:
     runs-on: ubuntu-latest
     
-    # កំណត់ពេលឈប់ (Timeout) ត្រឹម ៥ នាទី ការពារកុំឱ្យខាត Quota
+    # កំណត់ពេលឈប់ត្រឹម ៥ នាទី ការពារការជាប់គាំង
     timeout-minutes: 5
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-          cache: 'pip' # ប្រើ Cache ដើម្បីឱ្យការដំឡើង Library លឿនស្លេវ
+          cache: 'pip' # ជួយឱ្យ Bot រត់លឿនស្លេវ (មិនបាច់ដំឡើង Library ថ្មីរាល់ដង)
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install yfinance pandas numpy requests pytz
 
-      - name: Execute SMC Bot
+      - name: Execute Supreme Bot
         env:
-          # ទាញយកលេខ Token និង ID ពី Settings > Secrets > Actions របស់បង
+          # ប្រាកដថាបងបានដាក់ Secrets ទាំងនេះក្នុង GitHub Settings រួចរាល់
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
         run: python bot.py
