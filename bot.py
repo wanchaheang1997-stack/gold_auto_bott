@@ -80,7 +80,7 @@ def run_system():
     h4_bias = "BULLISH 🐂" if current_price > ma20_h4 else "BEARISH 🐻"
 
     # --- [A] ELITE PREMIUM REPORT (Topic 8) ---
-    if h in [8, 11, 14, 19, 21] and m <= 59:
+    if h in [8, 11, 14, 17, 19, 21] and m <= 59:
         pdh = df_h1['High'].tail(24).max()
         pdl = df_h1['Low'].tail(24).min()
         session_open = df_h1['Open'].iloc[-1]
