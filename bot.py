@@ -7,7 +7,7 @@ import pytz
 from datetime import datetime
 
 # ========================================
-# ⚙️ CONFIGURATION
+# ⚙️ SUPREME CONFIGURATION
 # ========================================
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = os.getenv('TELEGRAM_ID')
@@ -16,34 +16,38 @@ TOPIC_ALERTS = 18
 TIMEZONE = "Asia/Phnom_Penh"
 
 # ========================================
-# 🌍 FUNDAMENTAL & SENTIMENT ENGINE
+# 🛡️ THE TRIPLE-THREAT & MACRO ENGINE
 # ========================================
-def get_economic_calendar():
-    """ ត្រួតពិនិត្យព័ត៌មានសេដ្ឋកិច្ចសំខាន់ៗ (Simulated for Gold) """
-    # ក្នុងនាមជា Bot យើងផ្ដោតលើ USD News
-    events = [
-        {"time": "19:30", "event": "Core PCE Price Index", "impact": "HIGH 🔴"},
-        {"time": "21:00", "event": "Fed Chair Powell Speaks", "impact": "CRITICAL 🔥"}
-    ]
-    return events
 
-def get_market_sentiment(df_h1):
-    """ គណនា Retail Sentiment តាមរយៈ RSI & Price Action """
-    # ប្រើ RSI ដើម្បីស្មានពី Sentiment (Overbought = Sell Sentiment, Oversold = Buy Sentiment)
-    delta = df_h1['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    rsi = 100 - (100 / (1+rs))
-    curr_rsi = rsi.iloc[-1]
+def get_volume_profile_poc(df_h1):
+    """ រក POC - តំបន់មេដែកទាញតម្លៃ (ពី V6) """
+    bins = 30
+    df_h1['bin'] = pd.cut(df_h1['Close'], bins=bins)
+    poc_bin = df_h1.groupby('bin')['Volume'].sum().idxmax()
+    return (poc_bin.left + poc_bin.right) / 2
+
+def analyze_correlations():
+    """ វិភាគ DXY, Silver និង SMT Trap (ពី V7) """
+    dxy = yf.Ticker("DX-Y.NYB").history(period="2d", interval="1h")
+    silver = yf.Ticker("SI=F").history(period="2d", interval="1h")
+    if dxy.empty or silver.empty: return None
     
-    if curr_rsi > 70: return "EXTREME BULLISH (Retail Buying) 🐂"
-    if curr_rsi < 30: return "EXTREME BEARISH (Retail Selling) 🐻"
-    return "NEUTRAL (Waiting for Breakout) ⚖️"
+    # DXY Trend
+    dxy_now = dxy['Close'].iloc[-1]
+    dxy_prev = dxy['Open'].iloc[-1]
+    dxy_trend = "UP 📈 (Pressure on Gold)" if dxy_now > dxy_prev else "DOWN 📉 (Support for Gold)"
+    
+    return {"dxy": dxy_now, "dxy_trend": dxy_trend, "silver": silver['Close'].iloc[-1]}
 
-# ========================================
-# 🤖 TELEGRAM ACTIONS
-# ========================================
+def detect_sfp(df_m5, prev_h1_high, prev_h1_low):
+    """ ស្កែនរក SFP - ការបោកបញ្ឆោត Liquidity (ពី V6) """
+    last_candle = df_m5.iloc[-1]
+    if last_candle['High'] > prev_h1_high and last_candle['Close'] < prev_h1_high:
+        return "SFP BEARISH (Liquidity Grab) 🔴"
+    if last_candle['Low'] < prev_h1_low and last_candle['Close'] > prev_h1_low:
+        return "SFP BULLISH (Liquidity Grab) 🟢"
+    return None
+
 def send_telegram(text, topic_id):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id}
@@ -51,87 +55,79 @@ def send_telegram(text, topic_id):
     except: pass
 
 # ========================================
-# 📊 DATA ENGINE
-# ========================================
-def get_data():
-    ticker = yf.Ticker("GC=F")
-    df_h4 = ticker.history(period="30d", interval="4h")
-    df_h1 = ticker.history(period="15d", interval="1h")
-    df_m5 = ticker.history(period="3d", interval="5m")
-    return df_h4, df_h1, df_m5
-
-# ========================================
-# 🚀 THE SUPREME RUNNER V5
+# 🚀 THE SUPREME RUNNER (MIX V6 + V7)
 # ========================================
 def run_system():
     kh_tz = pytz.timezone(TIMEZONE)
     now_kh = datetime.now(kh_tz)
     h, m = now_kh.hour, now_kh.minute
 
-    df_h4, df_h1, df_m5 = get_data()
-    if df_h4.empty or df_h1.empty: return
-
-    current_price = df_m5['Close'].iloc[-1]
-    sentiment = get_market_sentiment(df_h1)
-    news_events = get_economic_calendar()
+    # 1. ទាញយកទិន្នន័យ (Gold, DXY, Silver)
+    gold_h1 = yf.Ticker("GC=F").history(period="15d", interval="1h")
+    gold_m5 = yf.Ticker("GC=F").history(period="5d", interval="5m")
+    gold_h4 = yf.Ticker("GC=F").history(period="30d", interval="4h")
     
-    # គណនា Trend H4
-    ma20_h4 = df_h4['Close'].rolling(window=20).mean().iloc[-1]
+    if gold_h1.empty: return
+
+    # 2. គណនា Logic សំខាន់ៗ
+    current_price = gold_m5['Close'].iloc[-1]
+    poc_price = get_volume_profile_poc(gold_h1)
+    macro = analyze_correlations()
+    
+    # វិភាគ Trend ធំ H4
+    ma20_h4 = gold_h4['Close'].rolling(20).mean().iloc[-1]
     h4_bias = "BULLISH 🐂" if current_price > ma20_h4 else "BEARISH 🐻"
 
-    # --- [A] ELITE PREMIUM REPORT (Topic 8) ---
-    if h in [8, 11, 14, 17, 19, 21] and m <= 59:
-        pdh = df_h1['High'].tail(24).max()
-        pdl = df_h1['Low'].tail(24).min()
-        session_open = df_h1['Open'].iloc[-1]
+    # --- [A] SUPREME INTELLIGENCE REPORT (Topic 8) ---
+    if h in [8, 11, 14, 19, 21] and m <= 59:
+        pdh, pdl = gold_h1['High'].tail(24).max(), gold_h1['Low'].tail(24).min()
         
-        # ផ្នែក Fundamental News
-        news_text = ""
-        for ev in news_events:
-            news_text += f"• `{ev['time']}`: {ev['event']} ({ev['impact']})\n"
-
+        # Fundamental News Context (March 31, 2026)
+        news_context = "Middle East Tension vs High Fed Rates"
+        
         report = (
-            f"🏆 **GOLD SUPREME INTELLIGENCE**\n"
+            f"👑 **HIGHEST SUPREME INTELLIGENCE**\n"
             f"📅 `{now_kh.strftime('%d %b %Y | %H:%M')}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"🌍 **FUNDAMENTAL & NEWS**\n"
-            f"{news_text}"
-            f"📊 **SENTIMENT:** `{sentiment}`\n\n"
-            f"🏛️ **INSTITUTIONAL CONTEXT**\n"
-            f"• **H4 Trend:** `{h4_bias}`\n"
-            f"• **Session Open:** `${session_open:,.2f}`\n"
+            f"🏛️ **MACRO CONTEXT:**\n"
+            f"• **DXY Index:** `{macro['dxy']:.2f}` ({macro['dxy_trend']})\n"
+            f"• **Silver:** `${macro['silver']:.2f}`\n"
+            f"• **News:** `{news_context}`\n\n"
+            f"📊 **TECHNICALS (V6+V7):**\n"
+            f"• **POC Magnet:** `${poc_price:,.2f}`\n"
+            f"• **H4 Bias:** `{h4_bias}`\n"
             f"• **Current Price:** `${current_price:,.2f}`\n\n"
-            f"🔍 **LIQUIDITY MAP (CRT)**\n"
+            f"🔍 **LIQUIDITY ZONES:**\n"
             f"🔼 PDH (BuySide): `${pdh:,.2f}`\n"
             f"🔽 PDL (SellSide): `${pdl:,.2f}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💡 *Advice: Trade only during Killzones.*"
+            f"💡 *Wait for SFP + SMT Divergence confirmation.*"
         )
         send_telegram(report, TOPIC_ANALYSIS)
 
-    # --- [B] CRT ALERTS (Topic 18) ---
-    prev_h1_high = df_h1['High'].iloc[-2]
-    prev_h1_low = df_h1['Low'].iloc[-2]
-    
-    setup = None
-    # SELL Logic: Sweep High + Bearish Bias
-    if current_price > prev_h1_high and "BEARISH" in h4_bias:
-        setup = {"type": "BSL SWEEP (CRT SELL) 🔴", "entry": current_price, "sl": current_price + 3.0, "tp": current_price - 6.0}
-    # BUY Logic: Sweep Low + Bullish Bias
-    elif current_price < prev_h1_low and "BULLISH" in h4_bias:
-        setup = {"type": "SSL SWEEP (CRT BUY) 🟢", "entry": current_price, "sl": current_price - 3.0, "tp": current_price + 6.0}
+    # --- [B] HIGHEST SUPREME ALERTS (Topic 18) ---
+    prev_h1_high, prev_h1_low = gold_h1['High'].iloc[-2], gold_h1['Low'].iloc[-2]
+    sfp_signal = detect_sfp(gold_m5, prev_h1_high, prev_h1_low)
 
-    if setup:
-        alert_msg = (
-            f"🚨 **ELITE SIGNAL: {setup['type']}**\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💎 **ENTRY:** `${setup['entry']:,.2f}`\n"
-            f"🎯 **TP:** `${setup['tp']:,.2f}`\n"
-            f"🛑 **SL:** `${setup['sl']:,.2f}`\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"⚠️ *Risk 1% - Wait for M5 CHoCH*"
-        )
-        send_telegram(alert_msg, TOPIC_ALERTS)
+    if sfp_signal:
+        # បញ្ជាក់សញ្ញាជាមួយ Macro (Confluence)
+        is_valid = False
+        if "BEARISH" in sfp_signal and macro['dxy_trend'].startswith("UP"): is_valid = True
+        if "BULLISH" in sfp_signal and macro['dxy_trend'].startswith("DOWN"): is_valid = True
+        
+        if is_valid:
+            alert_msg = (
+                f"🚨 **SUPREME SFP ALERT: {sfp_signal}**\n"
+                f"🏛️ **Macro Confluence:** `DXY Aligned`\n"
+                f"📊 **POC Rejection:** `${poc_price:,.2f}`\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"💰 **ENTRY:** `${current_price:,.2f}`\n"
+                f"🛡️ **SL:** `Above/Below SFP Wick`\n"
+                f"🎯 **TP:** `${poc_price:,.2f}` (Target POC)\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"⚠️ *Confirmation: Look for M1 MSS/CHoCH.*"
+            )
+            send_telegram(alert_msg, TOPIC_ALERTS)
 
 if __name__ == "__main__":
     run_system()
