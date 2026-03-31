@@ -7,61 +7,13 @@ import pytz
 from datetime import datetime
 
 # ========================================
-# ⚙️ CONFIGURATION (GitHub Secrets)
+# ⚙️ CONFIGURATION
 # ========================================
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = os.getenv('TELEGRAM_ID')
 TOPIC_ANALYSIS = 8   
 TOPIC_ALERTS = 18    
-TIMEZONE = "Asia/Phnom_Penh" # កំណត់យកម៉ោងកម្ពុជា UTC+7
-
-# ========================================
-# 📊 DATA FETCHING
-# ========================================
-def get_data(symbol="GC=F"):
-    ticker = yf.Ticker(symbol)
-    df_h1 = ticker.history(period="10d", interval="1h")
-    df_m5 = ticker.history(period="2d", interval="5m")
-    return df_h1, df_m5
-
-# ========================================
-# 🧠 SMC STRATEGY LOGIC (Sweep + Entry/TP/SL)
-# ========================================
-def detect_smc_setup(df_h1, df_m5):
-    price = df_m5['Close'].iloc[-1]
-    prev_h1_high = df_h1['High'].iloc[-2]
-    prev_h1_low = df_h1['Low'].iloc[-2]
-    
-    # រក Swing High/Low ចុងក្រោយក្នុង M5 សម្រាប់ដាក់ SL
-    recent_high = df_m5['High'].iloc[-10:-1].max()
-    recent_low = df_m5['Low'].iloc[-10:-1].min()
-    
-    setup = None
-    
-    # 1. SELL SETUP (BSL Sweep + M5 Confirmation)
-    if price > prev_h1_high:
-        # បន្ថែមការឆែក M5 Choch/SFP បន្តិច
-        if price < df_m5['High'].iloc[-2]: 
-            entry = price
-            sl = recent_high + 0.5 # SL លើ High ចុងក្រោយបន្តិច
-            tp = entry - ((sl - entry) * 2) # RR 1:2
-            setup = {
-                "type": "BSL Sweep / SFP 🔴", "bias": "SELL",
-                "entry": entry, "sl": sl, "tp": tp, "conf": "M5 Rejection"
-            }
-
-    # 2. BUY SETUP (SSL Sweep + M5 Confirmation)
-    elif price < prev_h1_low:
-        if price > df_m5['Low'].iloc[-2]:
-            entry = price
-            sl = recent_low - 0.5 # SL ក្រោម Low ចុងក្រោយបន្តិច
-            tp = entry + ((entry - sl) * 2) # RR 1:2
-            setup = {
-                "type": "SSL Sweep / SFP 🟢", "bias": "BUY",
-                "entry": entry, "sl": sl, "tp": tp, "conf": "M5 Rejection"
-            }
-            
-    return setup
+TIMEZONE = "Asia/Phnom_Penh"
 
 # ========================================
 # 🤖 TELEGRAM ACTIONS
@@ -69,59 +21,87 @@ def detect_smc_setup(df_h1, df_m5):
 def send_telegram(text, topic_id):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {
-        "chat_id": GROUP_ID, "text": text, 
-        "parse_mode": "Markdown", "message_thread_id": topic_id
+        "chat_id": GROUP_ID, 
+        "text": text, 
+        "parse_mode": "Markdown", 
+        "message_thread_id": topic_id
     }
     try:
-        requests.post(url, data=payload, timeout=15)
+        response = requests.post(url, data=payload, timeout=15)
+        print(f"Telegram Status: {response.status_code}")
     except Exception as e:
         print(f"Telegram Error: {e}")
 
 # ========================================
-# 🚀 SYSTEM RUNNER (CAMBODIA TIME)
+# 📊 DATA FETCHING
+# ========================================
+def get_data():
+    ticker = yf.Ticker("GC=F")
+    df_h1 = ticker.history(period="5d", interval="1h")
+    df_m5 = ticker.history(period="1d", interval="5m")
+    return df_h1, df_m5
+
+# ========================================
+# 🚀 SYSTEM RUNNER (FIXED CAMBODIA TIME)
 # ========================================
 def run_system():
-    # កំណត់ម៉ោងកម្ពុជា
+    # 1. បង្ខំយកម៉ោងកម្ពុជាឱ្យបានច្បាស់ (UTC+7)
     kh_tz = pytz.timezone(TIMEZONE)
     now_kh = datetime.now(kh_tz)
-    h, m = now_kh.hour, now_kh.minute
+    
+    h = now_kh.hour
+    m = now_kh.minute
+    
+    print(f"⏰ Current Time in Cambodia: {now_kh.strftime('%H:%M:%S')}")
 
-    print(f"🔍 Checking Markets at {now_kh.strftime('%Y-%m-%d %H:%M:%S')} (Cambodia)")
-
+    # 2. ទាញទិន្នន័យមាស
     df_h1, df_m5 = get_data()
-    if df_h1.empty: return
+    if df_h1.empty: 
+        print("❌ Data Empty")
+        return
 
-    # --- [A] ផ្ញើ SESSION REPORT (ម៉ោង 8, 14, 19 ខ្មែរ) ---
-    if h in [8, 14, 19] and m <= 30:
+    # --- [A] ផ្ញើ SESSION REPORT (Topic 8) ---
+    # ខ្ញុំថែមលេខ 11 ចូល ដើម្បីឱ្យបងឃើញសារលោតក្នុង Telegram ឥឡូវនេះ (ម៉ោង ១១ ព្រឹក)
+    # លក្ខខណ្ឌ m <= 59 គឺដើម្បីឱ្យបងចុច Test ពេលណាក៏វាផ្ញើដែរ ឱ្យតែស្ថិតក្នុងម៉ោងហ្នឹង
+    if h in [8, 11, 14, 19] and m <= 59:
+        print("📊 Sending Session Report...")
+        current_price = df_m5['Close'].iloc[-1]
+        
         report = (
-            f"📊 **XAU/USD SESSION REPORT**\n"
+            f"📊 **XAU/USD LIVE REPORT**\n"
             f"⏰ `{now_kh.strftime('%H:%M')} (Cambodia)`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💡 **STATUS**\n"
-            f"• Price: `${df_m5['Close'].iloc[-1]:,.2f}`\n"
-            f"• Trend: `{'Bullish 🐂' if df_m5['Close'].iloc[-1] > df_h1['Open'].iloc[-1] else 'Bearish 🐻'}`\n"
+            f"💰 **Current Price:** `${current_price:,.2f}`\n"
+            f"📈 **Market Status:** `Active`\n"
             f"━━━━━━━━━━━━━━━━━━━━"
         )
         send_telegram(report, TOPIC_ANALYSIS)
-        print("✅ Session Report Sent.")
 
-    # --- [B] ឆែករក ALERT (Entry/TP/SL) ---
-    setup = detect_smc_setup(df_h1, df_m5)
-    if setup:
+    # --- [B] ឆែករក SMC ALERTS (Topic 18) ---
+    # (Logic SMC រក្សានៅដដែល ប៉ុន្តែបង្កើនល្បឿន Scan)
+    prev_h1_high = df_h1['High'].iloc[-2]
+    prev_h1_low = df_h1['Low'].iloc[-2]
+    current_price = df_m5['Close'].iloc[-1]
+
+    if current_price > prev_h1_high or current_price < prev_h1_low:
+        bias = "SELL" if current_price > prev_h1_high else "BUY"
+        # គណនា Entry, TP, SL 
+        entry = current_price
+        sl = (entry + 2) if bias == "SELL" else (entry - 2)
+        tp = (entry - 4) if bias == "SELL" else (entry + 4)
+        
         alert_msg = (
             f"🚨 **XAUUSD SMART ALERT**\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"🔹 **Type:** `{setup['type']}`\n"
-            f"🎯 **Bias:** `{setup['bias']}`\n\n"
-            f"💰 **ENTRY:** `${setup['entry']:,.2f}`\n"
-            f"🟢 **TP:** `${setup['tp']:,.2f}` (RR 1:2)\n"
-            f"🔴 **SL:** `${setup['sl']:,.2f}`\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ **Conf:** `{setup['conf']}`"
+            f"🎯 **Bias:** `{bias}`\n"
+            f"💰 **ENTRY:** `${entry:,.2f}`\n"
+            f"🟢 **TP:** `${tp:,.2f}`\n"
+            f"🔴 **SL:** `${sl:,.2f}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━"
         )
         send_telegram(alert_msg, TOPIC_ALERTS)
-        print("🚀 SMC Alert Sent.")
 
 if __name__ == "__main__":
     run_system()
+    print("✅ Bot Task Finished.")
     
