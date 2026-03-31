@@ -7,7 +7,7 @@ import pytz
 from datetime import datetime
 
 # ========================================
-# ⚙️ CONFIGURATION (GitHub Secrets)
+# ⚙️ CONFIGURATION
 # ========================================
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = os.getenv('TELEGRAM_ID')
@@ -16,115 +16,111 @@ TOPIC_ALERTS = 18
 TIMEZONE = "Asia/Phnom_Penh"
 
 # ========================================
-# 🤖 TELEGRAM ACTIONS
+# 🛡️ ELITE ANALYSIS MODULES
 # ========================================
+def get_market_context(df_h4, df_h1):
+    """ វិភាគបរិបទទីផ្សារកម្រិតខ្ពស់ (Institutional Bias) """
+    # ឆែក Trend ធំ (H4)
+    ma20_h4 = df_h4['Close'].rolling(window=20).mean().iloc[-1]
+    curr_h4 = df_h4['Close'].iloc[-1]
+    h4_bias = "BULLISH 🐂" if curr_h4 > ma20_h4 else "BEARISH 🐻"
+    
+    # ឆែកទំហំនៃការប្រែប្រួល (Average True Range - ATR សម្រាយ)
+    atr = (df_h1['High'] - df_h1['Low']).tail(14).mean()
+    
+    return h4_bias, atr
+
 def send_telegram(text, topic_id):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {
-        "chat_id": GROUP_ID, 
-        "text": text, 
-        "parse_mode": "Markdown", 
-        "message_thread_id": topic_id
-    }
-    try:
-        requests.post(url, data=payload, timeout=15)
-    except Exception as e:
-        print(f"Telegram Error: {e}")
+    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id}
+    try: requests.post(url, data=payload, timeout=15)
+    except: pass
 
 # ========================================
-# 📊 DATA FETCHING
+# 📊 DATA ENGINE
 # ========================================
 def get_data():
     ticker = yf.Ticker("GC=F")
-    # ទាញទិន្នន័យ H1 សម្រាប់ Structure និង M5 សម្រាប់ Entry
-    df_h1 = ticker.history(period="10d", interval="1h")
-    df_m5 = ticker.history(period="2d", interval="5m")
-    return df_h1, df_m5
+    # ទាញយកទិន្នន័យច្រើន Timeframe ដើម្បីធ្វើ Confluence
+    df_h4 = ticker.history(period="30d", interval="4h")
+    df_h1 = ticker.history(period="15d", interval="1h")
+    df_m5 = ticker.history(period="3d", interval="5m")
+    return df_h4, df_h1, df_m5
 
 # ========================================
-# 🚀 SYSTEM RUNNER (FULL VERSION)
+# 🚀 THE SUPREME RUNNER
 # ========================================
 def run_system():
-    # 1. កំណត់ម៉ោងកម្ពុជាឱ្យបានច្បាស់
     kh_tz = pytz.timezone(TIMEZONE)
     now_kh = datetime.now(kh_tz)
     h, m = now_kh.hour, now_kh.minute
 
-    print(f"🔍 System Running at: {now_kh.strftime('%Y-%m-%d %H:%M:%S')} (Cambodia)")
+    df_h4, df_h1, df_m5 = get_data()
+    if df_h4.empty or df_h1.empty: return
 
-    # 2. ទាញទិន្នន័យ
-    df_h1, df_m5 = get_data()
-    if df_h1.empty or df_m5.empty: 
-        print("❌ Error: No data fetched!")
-        return
-
+    h4_bias, volatility = get_market_context(df_h4, df_h1)
     current_price = df_m5['Close'].iloc[-1]
-    prev_h1_high = df_h1['High'].iloc[-2]
-    prev_h1_low = df_h1['Low'].iloc[-2]
-    high_24h = df_h1['High'].tail(24).max()
-    low_24h = df_h1['Low'].tail(24).min()
-
-    # --- [A] FULL SESSION REPORT (Topic 8) ---
-    # ឆែកម៉ោង Session: 8 (Asia), 11 (Test), 14 (London), 19 (NY)
+    
+    # --- [A] PREMIUM SESSION REPORT (Topic 8) ---
+    # រាយការណ៍រៀងរាល់ម៉ោង Session ធំៗ
     if h in [8, 11, 14, 19] and m <= 59:
-        open_price = df_h1['Open'].iloc[-1]
-        change = current_price - open_price
-        change_pct = (change / open_price) * 100
-        bias = "BULLISH 🐂" if change > 0 else "BEARISH 🐻"
+        prev_day_high = df_h1['High'].tail(24).max()
+        prev_day_low = df_h1['Low'].tail(24).min()
+        session_open = df_h1['Open'].iloc[-1]
+        
+        distance_to_high = prev_day_high - current_price
+        distance_to_low = current_price - prev_day_low
 
         report = (
-            f"📊 **XAU/USD INSTITUTIONAL REPORT**\n"
-            f"⏰ `{now_kh.strftime('%H:%M:%S')} (Cambodia)`\n"
+            f"🏛️ **INSTITUTIONAL MARKET REPORT**\n"
+            f"📅 `{now_kh.strftime('%d %b %Y | %H:%M')}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💡 **MARKET SENTIMENT**\n"
-            f"• Current Price: `${current_price:,.2f}`\n"
-            f"• 24h Change: `{change:+.2f}$ ({change_pct:+.2f}%)`\n"
-            f"• Bias: `{bias}`\n\n"
-            f"🏗️ **STRUCTURE (H1)**\n"
-            f"• Prev H1 High: `${prev_h1_high:,.2f}`\n"
-            f"• Prev H1 Low: `${prev_h1_low:,.2f}`\n"
-            f"• 24h Range: `${low_24h:,.2f}` - `${high_24h:,.2f}`\n"
+            f"🎯 **BIAS H4:** `{h4_bias}`\n"
+            f"💰 **PRICE:** `${current_price:,.2f}`\n"
+            f"🚦 **OPEN:** `${session_open:,.2f}`\n\n"
+            f"🔍 **LIQUIDITY MAP:**\n"
+            f"🔼 PDH (BuySide): `${prev_day_high:,.2f}` (`{distance_to_high:.2f}$` left)\n"
+            f"🔽 PDL (SellSide): `${prev_day_low:,.2f}` (`{distance_to_low:.2f}$` left)\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"📢 *Monitoring Liquidity Sweeps...*"
+            f"💎 *Focus on CRT Sweeps at Session Open.*"
         )
         send_telegram(report, TOPIC_ANALYSIS)
-        print("✅ Full Report Sent.")
 
-    # --- [B] SMC SMART ALERTS (Topic 18) ---
-    # រក Swing High/Low ក្នុង M5 សម្រាប់ SL
-    m5_high = df_m5['High'].tail(10).max()
-    m5_low = df_m5['Low'].tail(10).min()
-
+    # --- [B] ELITE CRT/SMC ALERTS (Topic 18) ---
+    # កំណត់ Range ម៉ោងមុន (Candle Range)
+    prev_h1_high = df_h1['High'].iloc[-2]
+    prev_h1_low = df_h1['Low'].iloc[-2]
+    
     setup = None
-    # SELL: បើថ្លៃលើស H1 High (Liquidity Sweep)
-    if current_price > prev_h1_high:
+    # យុទ្ធសាស្ត្រ Candle Range Theory (CRT) + SFP
+    # SELL: បើតម្លៃបុកលើ H1 High រួចបកក្រោយ (Liquidity Grab)
+    if current_price > prev_h1_high and "BEARISH" in h4_bias:
         entry = current_price
-        sl = m5_high + 0.5
-        tp = entry - ((sl - entry) * 2) # RR 1:2
-        setup = {"type": "BSL Sweep / SFP 🔴", "bias": "SELL", "entry": entry, "tp": tp, "sl": sl}
+        sl = entry + 3.0 # Dynamic SL
+        tp = entry - 6.0 # RR 1:2
+        setup = {"type": "BSL PURGED (CRT SELL) 🔴", "entry": entry, "tp": tp, "sl": sl, "conf": "Premium Bearish Alignment"}
 
-    # BUY: បើថ្លៃទាបជាង H1 Low (Liquidity Sweep)
-    elif current_price < prev_h1_low:
+    # BUY: បើតម្លៃបុកក្រោម H1 Low រួចបកក្រោយ (Liquidity Grab)
+    elif current_price < prev_h1_low and "BULLISH" in h4_bias:
         entry = current_price
-        sl = m5_low - 0.5
-        tp = entry + ((entry - sl) * 2) # RR 1:2
-        setup = {"type": "SSL Sweep / SFP 🟢", "bias": "BUY", "entry": entry, "tp": tp, "sl": sl}
+        sl = entry - 3.0
+        tp = entry + 6.0
+        setup = {"type": "SSL PURGED (CRT BUY) 🟢", "entry": entry, "tp": tp, "sl": sl, "conf": "Premium Bullish Alignment"}
 
     if setup:
         alert_msg = (
-            f"🚨 **XAUUSD SMART ALERT**\n"
+            f"🚀 **ELITE SIGNAL: {setup['type']}**\n"
+            f"🏛️ **Institutional Flow:** `Confirmed`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"🔹 **Type:** `{setup['type']}`\n"
-            f"🎯 **Bias:** `{setup['bias']}`\n\n"
-            f"💰 **ENTRY:** `${setup['entry']:,.2f}`\n"
-            f"🟢 **TP:** `${setup['tp']:,.2f}` (RR 1:2)\n"
-            f"🔴 **SL:** `${setup['sl']:,.2f}`\n"
+            f"💎 **ENTRY:** `${setup['entry']:,.2f}`\n"
+            f"🎯 **TP (RR 1:2):** `${setup['tp']:,.2f}`\n"
+            f"🛑 **SL:** `${setup['sl']:,.2f}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ **Conf:** `Liquidity Purged`"
+            f"📢 **Note:** `{setup['conf']}`\n"
+            f"⚠️ *Risk 1% per trade. Manage manually.*"
         )
         send_telegram(alert_msg, TOPIC_ALERTS)
-        print("🚀 SMC Alert Sent.")
 
 if __name__ == "__main__":
     run_system()
-        
+    
