@@ -1,18 +1,14 @@
-name: XAUUSD Supreme Intelligence V5
+name: Gold Highest Supreme Sentinel V7.5
 
 on:
   schedule:
-    # ដាស់ Bot ឱ្យភ្ញាក់រៀងរាល់ ៥ នាទីម្តង (ច័ន្ទ-សុក្រ)
-    - cron: '*/5 * * * 1-5'
-  workflow_dispatch: # សម្រាប់ឱ្យបងចុច Run តេស្តដោយដៃបានគ្រប់ពេល
+    # ដើររៀងរាល់ 1 ម៉ោងម្តង (00, 01, 02, ... 23:00 UTC)
+    - cron: '0 * * * *'
+  workflow_dispatch: # បងអាចចុច Run ដោយដៃបានគ្រប់ពេល
 
 jobs:
-  run-trading-bot:
+  run-supreme-bot:
     runs-on: ubuntu-latest
-    
-    # កំណត់ពេលឈប់ត្រឹម ៥ នាទី ការពារការជាប់គាំង
-    timeout-minutes: 5
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -20,18 +16,24 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
-          cache: 'pip' # ជួយឱ្យ Bot រត់លឿនស្លេវ (មិនបាច់ដំឡើង Library ថ្មីរាល់ដង)
+          python-version: '3.11'
+          cache: 'pip' # ជួយឱ្យវា Run កាន់តែលឿន (Caching)
 
-      - name: Install Dependencies
+      - name: Install Supreme Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install yfinance pandas numpy requests pytz
 
-      - name: Execute Supreme Bot
+      - name: Execute Highest Supreme Bot
         env:
-          # ប្រាកដថាបងបានដាក់ Secrets ទាំងនេះក្នុង GitHub Settings រួចរាល់
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
         run: python bot.py
-        
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "### 🚀 Bot Status Report" >> $GITHUB_STEP_SUMMARY
+          echo "Execution Time: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "Status: Success ✅" >> $GITHUB_STEP_SUMMARY
+          
