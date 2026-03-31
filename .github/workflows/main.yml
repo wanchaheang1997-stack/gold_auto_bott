@@ -2,16 +2,16 @@ name: XAUUSD Institutional Bot V2
 
 on:
   schedule:
-    # ឱ្យ GitHub ដាស់ Bot ឱ្យភ្ញាក់រៀងរាល់ ៥ នាទីម្តង (ច័ន្ទ-សុក្រ)
-    # វានឹងរត់ស្វ័យប្រវត្តិ ២៤ ម៉ោងលើ ២៤ ម៉ោង
+    # ឱ្យ GitHub Actions ដាស់ Bot ឱ្យភ្ញាក់រៀងរាល់ ៥ នាទីម្តង (ច័ន្ទ-សុក្រ)
+    # វានឹងរត់ស្វ័យប្រវត្តិតាមម៉ោងកម្ពុជាដែលយើងកំណត់ក្នុង bot.py
     - cron: '*/5 * * * 1-5'
-  workflow_dispatch: # សម្រាប់ឱ្យបងចុច Run តេស្តដោយដៃបានគ្រប់ពេល
+  workflow_dispatch: # សម្រាប់ឱ្យបងចុចប៊ូតុង Run តេស្តដោយដៃបានគ្រប់ពេល
 
 jobs:
   run-trading-bot:
     runs-on: ubuntu-latest
     
-    # កំណត់ Timeout ត្រឹម ៥ នាទី (ការពារកូដជាប់គាំង)
+    # កំណត់ពេលឈប់ (Timeout) ត្រឹម ៥ នាទី ការពារកុំឱ្យខាត Quota
     timeout-minutes: 5
 
     steps:
@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-          cache: 'pip' # ជួយឱ្យការ Run លើកក្រោយៗលឿនស្លេវ (ត្រឹម ៣០ វិនាទី)
+          cache: 'pip' # ប្រើ Cache ដើម្បីឱ្យការដំឡើង Library លឿនស្លេវ
 
       - name: Install Dependencies
         run: |
@@ -31,7 +31,7 @@ jobs:
 
       - name: Execute SMC Bot
         env:
-          # ប្រាកដថាបងបានដាក់ Secrets ទាំងនេះក្នុង Settings > Secrets > Actions រួចរាល់
+          # ទាញយកលេខ Token និង ID ពី Settings > Secrets > Actions របស់បង
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
         run: python bot.py
