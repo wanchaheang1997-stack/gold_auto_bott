@@ -1,10 +1,10 @@
-name: Gold Sovereign Trinity V12.6
+name: Gold Sovereign E11 v2.0
 
 on:
   schedule:
-    # រត់រៀងរាល់ ១៥ នាទីម្ដង (ឧទាហរណ៍៖ 10:00, 10:15, 10:30, 10:45)
+    # រត់រៀងរាល់ ១៥ នាទីម្ដង (ស្មើនឹង ៩៦ ដងក្នុងមួយថ្ងៃ)
     - cron: '*/15 * * * *'
-  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run ផ្ទាល់ដៃដើម្បីតេស្ត
+  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run តេស្តដោយផ្ទាល់ដៃ
 
 jobs:
   build:
@@ -24,7 +24,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install yfinance pandas numpy requests pytz
 
-      - name: Run Sovereign Trinity Bot
+      - name: Run E11 v2.0 Trinity Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
