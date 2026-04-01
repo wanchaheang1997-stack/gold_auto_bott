@@ -19,64 +19,83 @@ def send_telegram(text, topic_id=None):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown"}
     if topic_id: payload["message_thread_id"] = topic_id
-    try:
-        r = requests.post(url, data=payload, timeout=15)
-        print(f"📡 Status: {r.status_code}")
+    try: requests.post(url, data=payload, timeout=15)
     except: pass
 
-def get_yahoo_data():
-    # ១. ព្យាយាមទាញទិន្នន័យមាស (ការពារកុំឱ្យជួប Error 404)
-    gold_symbols = ["GC=F", "XAUUSD=X", "XAU-USD"]
-    df_gold = pd.DataFrame()
-    for sym in gold_symbols:
+def get_market_data():
+    symbols = ["GC=F", "XAUUSD=X"]
+    for sym in symbols:
         try:
-            df_gold = yf.Ticker(sym).history(period="2d", interval="1h")
-            if not df_gold.empty: break
+            ticker = yf.Ticker(sym)
+            df_h1 = ticker.history(period="3d", interval="1h")
+            df_m5 = ticker.history(period="1d", interval="5m")
+            if not df_h1.empty: return df_h1, df_m5
         except: continue
-
-    # ២. ទាញទិន្នន័យ Macro (Yield & Silver)
-    try:
-        yield_10y = yf.Ticker("^TNX").history(period="1d")['Close'].iloc[-1]
-        silver = yf.Ticker("SI=F").history(period="1d")['Close'].iloc[-1]
-        gs_ratio = df_gold['Close'].iloc[-1] / silver if not df_gold.empty else 0
-    except:
-        yield_10y, gs_ratio = 0.0, 0.0
-
-    return df_gold, yield_10y, gs_ratio
+    return pd.DataFrame(), pd.DataFrame()
 
 def run_system():
     kh_tz = pytz.timezone(TIMEZONE)
     now_kh = datetime.now(kh_tz)
+    df_h1, df_m5 = get_market_data()
     
-    df_gold, yld, gsr = get_yahoo_data()
-    if df_gold.empty: 
-        print("❌ មិនអាចទាញទិន្នន័យពី Yahoo បានឡើយ")
-        return
+    if df_h1.empty: return
 
-    price = df_gold['Close'].iloc[-1]
+    # 1️⃣ E11 CONCEPT (Session Liquidity)
+    sessions = {'Tokyo': ('08:00', '10:00'), 'London': ('14:00', '16:00'), 'NY': ('19:00', '22:00')}
+    zones = {}
+    for s_name, (start, end) in sessions.items():
+        d = df_h1.between_time(start, end)
+        zones[s_name] = {'H': d['High'].max() if not d.empty else 0, 'L': d['Low'].min() if not d.empty else 0}
+
+    # 2️⃣ SN1P3R VOLUME DELTA (CVD Flow)
+    df_m5['Delta'] = np.where(df_m5['Close'] > df_m5['Open'], df_m5['Volume'], -df_m5['Volume'])
+    cvd_3 = df_m5['Delta'].tail(3).sum() # Delta 3 candles ចុងក្រោយ
+    cvd_stat = "BULLISH 🟢" if cvd_3 > 0 else "BEARISH 🔴"
+
+    # 3️⃣ BTRADER CONCEPT (CHoCH & Change in Character)
+    # រកមើលការបំបែក Structure បែបលឿនៗ (Internal Structure)
+    last_c = df_m5['Close'].iloc[-1]
+    prev_h = df_m5['High'].shift(1).iloc[-1]
+    prev_l = df_m5['Low'].shift(1).iloc[-1]
     
-    # --- ១. សារតេស្ត (បាញ់ភ្លាមៗពេល Run) ---
-    test_msg = f"🚀 **Yahoo Engine Online!**\n💰 Gold: `${price:.2f}` | 📈 Yield: `{yld:.2f}%`"
-    send_telegram(test_msg, TOPIC_ANALYSIS)
+    is_choch_up = last_c > prev_h and cvd_3 > 0
+    is_choch_down = last_c < prev_l and cvd_3 < 0
 
-    # --- ២. REPORT (តាមទម្រង់ដែលបងចង់បាន) ---
-    target_hours = [8, 10, 14, 16, 19, 21, 22]
-    if now_kh.hour in target_hours:
+    # --- 📊 ផ្ញើ REPORT (តាមម៉ោង) ---
+    if now_kh.hour in [8, 10, 14, 16, 19, 21, 22] and now_kh.minute < 15:
         report = (
-            f"🏛 **SOVEREIGN SESSION REPORT**\n"
-            f"📅 `{now_kh.strftime('%H:%M')}`\n"
+            f"🏛 **SOVEREIGN TRINITY REPORT**\n"
+            f"📅 `{now_kh.strftime('%H:%M')}` | Price: `${last_c:.2f}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"🌍 **MACRO & SENTIMENT:**\n"
-            f"• Price: `${price:.2f}`\n"
-            f"• Yield: `{yld:.2f}%` | Gold/Silver: `{gsr:.1f}`\n"
-            f"• Sentiment: `Monitoring Liquidity...`\n\n"
-            f"🗺 **SESSION MONITORING:**\n"
-            f"• 🇯🇵 Tokyo | 🇬🇧 London | 🇺🇸 N.York\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ *Check SFP & Sweep on TradingView!*"
+            f"🎯 **SN1P3R:** `{cvd_stat}` (Delta: {cvd_3:,.0f})\n"
+            f"⚡ **BTRADER:** `Monitoring CHoCH...`\n"
+            f"🗺 **E11:** `Watching Session High/Low`\n"
+            f"━━━━━━━━━━━━━━━━━━━━"
         )
         send_telegram(report, TOPIC_ANALYSIS)
 
+    # --- 🚨 ALERT (TRIPLE CONFLUENCE) ---
+    for s_name, z in zones.items():
+        if z['H'] == 0: continue
+        
+        # BUY SIGNAL: Price Sweep Low (E11) + CHoCH Up (BTrader) + Positive Delta (Sn1P3r)
+        if last_c < z['L'] and is_choch_up:
+            alert = (f"🔥 **TRINITY BUY SIGNAL**\n"
+                     f"📍 Zone: {s_name} L Sweep\n"
+                     f"⚡ BTrader: CHoCH Up ✅\n"
+                     f"📊 Sn1P3r: Delta Positive ✅\n"
+                     f"💰 Price: `${last_c:.2f}`")
+            send_telegram(alert, TOPIC_ALERTS)
+            
+        # SELL SIGNAL: Price Sweep High (E11) + CHoCH Down (BTrader) + Negative Delta (Sn1P3r)
+        elif last_c > z['H'] and is_choch_down:
+            alert = (f"🔥 **TRINITY SELL SIGNAL**\n"
+                     f"📍 Zone: {s_name} H Sweep\n"
+                     f"⚡ BTrader: CHoCH Down ✅\n"
+                     f"📊 Sn1P3r: Delta Negative ✅\n"
+                     f"💰 Price: `${last_c:.2f}`")
+            send_telegram(alert, TOPIC_ALERTS)
+
 if __name__ == "__main__":
     run_system()
-    
+        
