@@ -21,16 +21,15 @@ def send_telegram(text, topic_id=None):
     if topic_id: payload["message_thread_id"] = topic_id
     try:
         r = requests.post(url, data=payload, timeout=15)
-        print(f"Log: Sent to {topic_id} - {r.status_code}")
+        print(f"Log: Sent to {topic_id} - Status {r.status_code}")
     except: pass
 
 def run_system():
     kh_tz = pytz.timezone(TIMEZONE)
     now_kh = datetime.now(kh_tz)
+    current_hour = now_kh.hour
+    current_minute = now_kh.minute
     
-    # បើលើសពីម៉ោង ២២:១៥ ឬមុនម៉ោង ០៨:០០ ឱ្យវាសម្រាក (Optional - បើបងចង់ឱ្យវាស្ងាត់ពេលយប់)
-    # if now_kh.hour > 22 or now_kh.hour < 8: return
-
     try:
         ticker = yf.Ticker("XAUUSD=X")
         df_h1 = ticker.history(period="3d", interval="1h")
@@ -38,7 +37,7 @@ def run_system():
         
         if df_h1.empty or df_m5.empty: return
 
-        # ១. SMC Logic: Session Zones
+        # ១. SMC Logic: Session Zones (E11)
         sessions = {'Tokyo': ('08:00', '10:00'), 'London': ('14:00', '16:00'), 'NY': ('19:00', '22:00')}
         sess_zones = {}
         for name, (s, e) in sessions.items():
@@ -54,12 +53,14 @@ def run_system():
         cvd_flow = "BUYING 🟢" if cvd_val > 0 else "SELLING 🔴"
         price = df_m5['Close'].iloc[-1]
 
-        # ៣. SCHEDULED REPORT: រៀងរាល់ ២ ម៉ោង (8, 10, 12, 14, 16, 18, 20, 22)
-        # ឆែកលក្ខខណ្ឌ៖ ម៉ោងគូ និង នាទីក្នុងចន្លោះ ០-១៥
-        report_hours = [8, 10, 12, 14, 16, 18, 20, 22]
-        if now_kh.hour in report_hours and now_kh.minute < 15:
+        # ៣. SCHEDULED REPORT: តាមម៉ោងដែលបងកំណត់ជាក់លាក់
+        # ម៉ោង៖ 8, 10, 14, 16, 19, 21, 22
+        target_hours = [8, 10, 14, 16, 19, 21, 22]
+        
+        # បញ្ជាក់៖ ផ្ញើតែម្តងគត់ក្នុងចន្លោះនាទីទី ០ ដល់ ១៥ នៃម៉ោងនីមួយៗ
+        if current_hour in target_hours and current_minute < 15:
             report = (
-                f"🏛 **SOVEREIGN REPORT V10.3.3**\n"
+                f"🏛 **SOVEREIGN REPORT V10.3.4**\n"
                 f"📅 `{now_kh.strftime('%H:%M')}` | Price: `${price:.2f}`\n"
                 f"📊 Sn1P3r Delta: `{cvd_flow}`\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
@@ -68,23 +69,23 @@ def run_system():
                 f"• London H: `${sess_zones['London']['H']:.1f}`\n"
                 f"• NY High: `${sess_zones['NY']['H']:.1f}`\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"📡 *Next Report: In 2 Hours*"
+                f"🎯 *Wait for BTrader CHoCH Confirmation*"
             )
             send_telegram(report, TOPIC_ANALYSIS)
 
-        # ៤. STRATEGIC ALERT: Scan រាល់ពេល Run (១៥ នាទីម្ដង)
+        # ៤. STRATEGIC ALERT: Scan រក Sweep (រត់រាល់ ១៥ នាទី)
         curr_h, curr_l, curr_c = df_m5['High'].iloc[-1], df_m5['Low'].iloc[-1], df_m5['Close'].iloc[-1]
         for s_name, zones in sess_zones.items():
             if zones['H'] == 0: continue
             
-            # $LSH (Sweep High)
+            # Sweep High ($LSH)
             if curr_h > zones['H'] and curr_c < zones['H']:
-                alert = f"🚨 **$LSH: {s_name} SWEEP**\n💰 Price: `${curr_c:.2f}`\n📊 Delta: `{cvd_flow}`\n⚡ *Wait for BTrader CHoCH!*"
+                alert = f"🚨 **$LSH: {s_name} SWEEP**\n💰 Price: `${curr_c:.2f}`\n📊 Delta: `{cvd_flow}`\n⚡ *Watch CHoCH for Entry!*"
                 send_telegram(alert, TOPIC_ALERTS)
                 
-            # $LSL (Sweep Low)
+            # Sweep Low ($LSL)
             elif curr_l < zones['L'] and curr_c > zones['L']:
-                alert = f"🚨 **$LSL: {s_name} SWEEP**\n💰 Price: `${curr_c:.2f}`\n📊 Delta: `{cvd_flow}`\n⚡ *Wait for BTrader CHoCH!*"
+                alert = f"🚨 **$LSL: {s_name} SWEEP**\n💰 Price: `${curr_c:.2f}`\n📊 Delta: `{cvd_flow}`\n⚡ *Watch CHoCH for Entry!*"
                 send_telegram(alert, TOPIC_ALERTS)
 
     except Exception as e:
@@ -92,4 +93,4 @@ def run_system():
 
 if __name__ == "__main__":
     run_system()
-    
+        
