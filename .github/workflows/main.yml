@@ -4,7 +4,7 @@ on:
   schedule:
     # ដើររៀងរាល់ 30 នាទីម្តង ដើម្បីចាប់ SFP និង Update Sentiment/Calendar
     - cron: '*/30 * * * *'
-  workflow_dispatch: # បងអាចចុច Run ដោយដៃបានគ្រប់ពេល
+  workflow_dispatch: # បងអាចចុច Run ដោយដៃបានគ្រប់ពេលក្នុង Tab Actions
 
 jobs:
   run-sovereign-bot:
@@ -22,7 +22,7 @@ jobs:
       - name: Install Advanced Dependencies
         run: |
           python -m pip install --upgrade pip
-          # បន្ថែម beautifulsoup4 និង lxml សម្រាប់ទាញទិន្នន័យពី Web
+          # បន្ថែម beautifulsoup4 និង lxml សម្រាប់ Scrape ទិន្នន័យពី Web
           pip install yfinance pandas numpy requests pytz beautifulsoup4 lxml
 
       - name: Execute V10 Sovereign Bot
