@@ -15,19 +15,41 @@ TOPIC_ANALYSIS = 8
 TOPIC_ALERTS = 18    
 TIMEZONE = "Asia/Phnom_Penh"
 
-def get_macro_data():
+def get_macro_and_sentiment():
     try:
+        # 1. Fundamental (Yields & Ratios)
         tnx = yf.Ticker("^TNX").history(period="2d")['Close'].iloc[-1]
         gold = yf.Ticker("GC=F").history(period="2d")['Close'].iloc[-1]
         silver = yf.Ticker("SI=F").history(period="2d")['Close'].iloc[-1]
-        return tnx, (gold / silver)
-    except: return 0.0, 0.0
+        gs_ratio = gold / silver
+        
+        # 2. Sentimental Approximation (ប្រើកម្លាំង RSI ធ្វើជាតំណាង Retail Sentiment)
+        # បើ RSI ខ្ពស់ Retail ចូលចិត្តលក់ (Contrarian)
+        g_ticker = yf.Ticker("GC=F")
+        hist = g_ticker.history(period="5d", interval="1h")
+        delta = hist['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        
+        sentiment_val = rsi.iloc[-1]
+        # Logic Sentiment: RSI > 60 = Retail Buying, RSI < 40 = Retail Selling
+        if sentiment_val > 60:
+            s_text = "Retail Bias: BUYING 🟢"
+            s_detail = f"{int(sentiment_val)}% / {100-int(sentiment_val)}%"
+        else:
+            s_text = "Retail Bias: SELLING 🔴"
+            s_detail = f"{100-int(sentiment_val)}% / {int(sentiment_val)}%"
+            
+        return tnx, gs_ratio, s_text, s_detail
+    except:
+        return 0.0, 0.0, "Sentiment: N/A", "50% / 50%"
 
 def get_cvd_bias(df_m5):
     df_m5 = df_m5.copy()
-    # គណនា Delta Approximation
     df_m5['Delta'] = np.where(df_m5['Close'] > df_m5['Open'], df_m5['Volume'], -df_m5['Volume'])
-    cvd = df_m5['Delta'].tail(12).sum() # មើលកម្លាំងក្នុង ១ ម៉ោងចុងក្រោយ
+    cvd = df_m5['Delta'].tail(12).sum()
     bias = "Aggressive Buying 🟢" if cvd > 0 else "Aggressive Selling 🔴"
     return cvd, bias
 
@@ -38,7 +60,7 @@ def send_telegram(text, topic_id):
     except: pass
 
 # ========================================
-# 🚀 THE ULTIMATE RUNNER (V10.2)
+# 🚀 THE COMPLETE RUNNER (V10.3)
 # ========================================
 def run_system():
     kh_tz = pytz.timezone(TIMEZONE)
@@ -50,66 +72,45 @@ def run_system():
     
     if df_h1.empty or df_m5.empty: return
 
-    # គណនា Indicators ទាំងអស់
-    yield_10y, gs_ratio = get_macro_data()
-    cvd_val, cvd_bias = get_cvd_bias(df_m5)
+    yield_10y, gs_ratio, s_bias, s_ratio = get_macro_and_sentiment()
+    cvd_val, cvd_flow = get_cvd_bias(df_m5)
     
-    # ស្វែងរក Tokyo High/Low
-    tokyo_data = df_h1.between_time('00:00', '07:00')
-    tokyo_h = tokyo_data['High'].max()
-    tokyo_l = tokyo_data['Low'].min()
+    tokyo_h = df_h1.between_time('00:00', '07:00')['High'].max()
+    tokyo_l = df_h1.between_time('00:00', '07:00')['Low'].min()
     current_price = df_m5['Close'].iloc[-1]
 
     # --- [A] INSTITUTIONAL REPORT (Topic 8) ---
-    # កំណត់ឱ្យផ្ញើរាល់ម៉ោងជួញដូរសំខាន់ៗ (រួមទាំងម៉ោង ២ រសៀលនេះ)
     if now_kh.hour in [8, 11, 14, 15, 19, 21]:
         report = (
-            f"🏛 **SOVEREIGN MARKET REPORT**\n"
+            f"🏛 **SOVEREIGN COMPLETE REPORT**\n"
             f"📅 `{now_kh.strftime('%d %b | %H:%M')}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"📈 **MACRO DRIVERS:**\n"
+            f"🌍 **FUNDAMENTALS:**\n"
             f"• US 10Y Yield: `{yield_10y:.2f}%`\n"
-            f"• Gold/Silver Ratio: `{gs_ratio:.2f}`\n\n"
+            f"• Gold/Silver: `{gs_ratio:.2f}`\n\n"
+            f"🧠 **SENTIMENT (RETAIL):**\n"
+            f"• `{s_bias}`\n"
+            f"• Ratio: `{s_ratio}`\n\n"
             f"🔥 **ORDER FLOW (CVD):**\n"
-            f"• Market Bias: `{cvd_bias}`\n"
-            f"• Flow Strength: `{abs(cvd_val):,.0f}`\n\n"
+            f"• Bias: `{cvd_flow}`\n"
+            f"• Strength: `{abs(cvd_val):,.0f}`\n\n"
             f"🗺 **INTRADAY ZONES:**\n"
             f"• Tokyo High: `${tokyo_h:,.1f}`\n"
             f"• Tokyo Low: `${tokyo_l:,.1f}`\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"✅ *Analysis Ready - Check Alerts!*"
+            f"✅ *Full Data Active*"
         )
         send_telegram(report, TOPIC_ANALYSIS)
 
-    # --- [B] SOVEREIGN ALERTS (Topic 18) ---
+    # --- [B] ALERTS (Topic 18) ---
     last_m5 = df_m5.iloc[-1]
-    
-    # Logic: Sweep Tokyo High (Sell Setup)
     if last_m5['High'] > tokyo_h and last_m5['Close'] < tokyo_h:
-        alert = (
-            f"🚨 **SFP ALERT: TOKYO HIGH SWEEP**\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💰 Price: `${current_price:,.2f}`\n"
-            f"📊 CVD Flow: `{cvd_bias}`\n"
-            f"🏛 Zone: `Tokyo High Sweep` (SELL)\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"⚠️ *Wait for M1 MSS/CHoCH!*"
-        )
-        send_telegram(alert, TOPIC_ALERTS)
-        
-    # Logic: Sweep Tokyo Low (Buy Setup)
+        msg = f"🚨 **SFP: TOKYO HIGH SWEEP**\n💰 Price: `${current_price:,.2f}`\n📊 CVD: `{cvd_flow}`\n🧠 {s_bias}"
+        send_telegram(msg, TOPIC_ALERTS)
     elif last_m5['Low'] < tokyo_l and last_m5['Close'] > tokyo_l:
-        alert = (
-            f"🚨 **SFP ALERT: TOKYO LOW SWEEP**\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💰 Price: `${current_price:,.2f}`\n"
-            f"📊 CVD Flow: `{cvd_bias}`\n"
-            f"🏛 Zone: `Tokyo Low Sweep` (BUY)\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"⚠️ *Wait for M1 MSS/CHoCH!*"
-        )
-        send_telegram(alert, TOPIC_ALERTS)
+        msg = f"🚨 **SFP: TOKYO LOW SWEEP**\n💰 Price: `${current_price:,.2f}`\n📊 CVD: `{cvd_flow}`\n🧠 {s_bias}"
+        send_telegram(msg, TOPIC_ALERTS)
 
 if __name__ == "__main__":
     run_system()
-                       
+        
