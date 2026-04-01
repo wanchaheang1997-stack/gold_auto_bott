@@ -1,9 +1,10 @@
-name: Gold Sovereign Sniper V10.8
+name: Gold Sovereign Sniper V11.0
 
 on:
   schedule:
+    # រត់រៀងរាល់ ៣០ នាទីម្ដង
     - cron: '*/30 * * * *'
-  workflow_dispatch:
+  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run ផ្ទាល់ដៃ
 
 jobs:
   build:
