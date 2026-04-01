@@ -75,7 +75,7 @@ def run_system():
     cvd_flow = "Aggressive Buying 🟢" if cvd_val > 0 else "Aggressive Selling 🔴"
 
     # --- [A] REPORT (Topic 8) ---
-    if now_kh.hour in [8, 11, 14, 15, 19, 21]:
+    if now_kh.hour in [8, 14, 16, 19, 21]:
         report = (
             f"🏛 **SOVEREIGN SESSION REPORT**\n"
             f"📅 `{now_kh.strftime('%H:%M')}`\n"
