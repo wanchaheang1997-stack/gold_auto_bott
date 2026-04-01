@@ -2,9 +2,8 @@ name: Gold Sovereign Sniper V10.8
 
 on:
   schedule:
-    # ឱ្យ Bot រត់រៀងរាល់ ៣០ នាទីម្តង (ឬបងអាចដូរមក ១៥ នាទីម្តងបាន)
     - cron: '*/30 * * * *'
-  workflow_dispatch: # សម្រាប់ឱ្យបងចុច Run ផ្ទាល់ដៃបានគ្រប់ពេល
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,10 +11,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: symbols/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
