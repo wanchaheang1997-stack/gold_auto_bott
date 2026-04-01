@@ -56,7 +56,7 @@ def run_system():
         cvd_flow = "BUYING 🟢" if cvd_val > 0 else "SELLING 🔴"
 
         # ៤. REPORT តាមម៉ោង (Topic 8)
-        if now_kh.hour in [8, 11, 14, 16, 17, 19, 21]:
+        if now_kh.hour in [8, 11, 14, 16, 19, 20, 22]:
             report = (
                 f"🏛 **SOVEREIGN SNIPER V12.1**\n"
                 f"📅 `{now_kh.strftime('%H:%M')}` | **XAUUSD**\n"
