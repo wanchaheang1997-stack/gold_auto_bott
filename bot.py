@@ -11,7 +11,7 @@ from datetime import datetime
 # ========================================
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = os.getenv('TELEGRAM_ID') 
-TOPIC_ANALYSIS = 8   
+TOPIC_STRUCTURE = 8   
 TOPIC_ALERTS = 18    
 TIMEZONE = "Asia/Phnom_Penh"
 
@@ -19,57 +19,80 @@ def send_telegram(text, topic_id=None):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown"}
     if topic_id: payload["message_thread_id"] = topic_id
-    try:
-        r = requests.post(url, data=payload, timeout=15)
-        print(f"📡 Status: {r.status_code}")
+    try: requests.post(url, data=payload, timeout=15)
     except: pass
 
-def run_system():
+def run_e11_v2():
     kh_tz = pytz.timezone(TIMEZONE)
     now_kh = datetime.now(kh_tz)
     
-    # ១. ទាញទិន្នន័យពី Yahoo (ជាមួយ Backup)
     try:
-        ticker = yf.Ticker("GC=F")
-        df_h1 = ticker.history(period="3d", interval="1h")
-        df_m5 = ticker.history(period="1d", interval="5m")
-        if df_h1.empty: return
+        ticker = yf.Ticker("GC=F") # Gold Futures for better Volume
+        df = ticker.history(period="3d", interval="5m")
+        df_h1 = ticker.history(period="5d", interval="1h")
+        if df.empty: return
     except: return
 
-    price = df_m5['Close'].iloc[-1]
-    
-    # ២. គណនា Indicators (E11, Sn1P3r, BTrader)
+    # --- 1️⃣ E11 LIQUIDITY ZONES (High/Low of Sessions) ---
     sessions = {'Tokyo': ('08:00', '10:00'), 'London': ('14:00', '16:00'), 'NY': ('19:00', '22:00')}
     zones = {}
-    for s_name, (start, end) in sessions.items():
+    for s, (start, end) in sessions.items():
         d = df_h1.between_time(start, end)
-        zones[s_name] = {'H': d['High'].max() if not d.empty else 0, 'L': d['Low'].min() if not d.empty else 0}
+        zones[s] = {'H': d['High'].max(), 'L': d['Low'].min()}
 
-    df_m5['Delta'] = np.where(df_m5['Close'] > df_m5['Open'], df_m5['Volume'], -df_m5['Volume'])
-    cvd_stat = "BULLISH 🟢" if df_m5['Delta'].tail(3).sum() > 0 else "BEARISH 🔴"
+    # --- 2️⃣ SN1P3R VOLUME DELTA (LuxAlgo Style) ---
+    df['Delta'] = np.where(df['Close'] > df['Open'], df['Volume'], -df['Volume'])
+    cvd_flow = df['Delta'].tail(5).sum()
+    vol_sma = df['Volume'].rolling(20).mean().iloc[-1]
+    curr_vol = df['Volume'].iloc[-1]
 
-    # --- 📢 ៣. បាញ់សារភ្លាមៗ (ពេលបងចុច RUN ឥឡូវនេះ) ---
+    # --- 3️⃣ BTRADER CHOCH & SFP LOGIC ($LSL / $LSH) ---
+    last_c = df['Close'].iloc[-1]
+    last_h = df['High'].iloc[-1]
+    last_l = df['Low'].iloc[-1]
+    prev_h = df['High'].iloc[-2]
+    prev_l = df['Low'].iloc[-2]
+    
+    # CHoCH Confirmation (BTrader)
+    choch_up = last_c > prev_h
+    choch_down = last_c < prev_l
+
+    # --- 📊 TOPIC 8: STRUCTURE REPORT (Every 15m) ---
     report = (
-        f"🏛 **SOVEREIGN TRINITY REPORT**\n"
-        f"📅 `{now_kh.strftime('%H:%M:%S')}` | Price: `${price:.2f}`\n"
+        f"🏛 **E11 CONCEPT 2.0 REPORT**\n"
+        f"⏰ `{now_kh.strftime('%H:%M:%S')}` | Price: `${last_c:.2f}`\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🌍 **MACRO & SENTIMENT:**\n"
-        f"• CVD Flow: `{cvd_stat}`\n"
-        f"• Status: `System Online ✅`\n\n"
-        f"🗺 **E11 SESSION MONITORING:**\n"
-        f"• Tokyo H/L: `${zones['Tokyo']['H']:.1f}` / `${zones['Tokyo']['L']:.1f}`\n"
-        f"• London H/L: `${zones['London']['H']:.1f}` / `${zones['London']['L']:.1f}`\n"
-        f"• NY High/L: `${zones['NY']['H']:.1f}` / `${zones['NY']['L']:.1f}`\n"
+        f"🔍 **MARKET BIAS (Sn1P3r):**\n"
+        f"• Flow: `{'BULLISH 🟢' if cvd_flow > 0 else 'BEARISH 🔴'}`\n"
+        f"• Vol Strength: `{'HIGH ⚡' if curr_vol > vol_sma else 'LOW'}`\n\n"
+        f"🗺 **LIQUIDITY ZONES (E11):**\n"
+        f"• London High: `${zones['London']['H']:.1f}`\n"
+        f"• NY Low: `${zones['NY']['L']:.1f}`\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"✅ *Check SFP & BTrader CHoCH!*"
+        f"✅ *Monitoring $LSL/$LSH Sweep...*"
     )
-    # ផ្ញើចូល Topic 8 ជាការបញ្ជាក់ថា Bot ដើរ
-    send_telegram(report, TOPIC_ANALYSIS)
+    send_telegram(report, TOPIC_STRUCTURE)
 
-    # ៤. មុខងារ ALERT ស្វ័យប្រវត្តិ (ទុកឱ្យវា Scan រក Triple Confluence)
-    # វានឹងលោតចូល Topic 18 តែពេលណាគ្រប់លក្ខខណ្ឌប៉ុណ្ណោះ
-    # ... (Logic Alert ចាស់ៗនៅដដែល)
+    # --- 🚨 TOPIC 18: SNIPER ALERTS (Confirmation Only) ---
+    for s, z in zones.items():
+        # 🟢 $LSL (Liquidity Sweep Low) + CHoCH Up + Positive Delta
+        if last_l < z['L'] and last_c > z['L'] and choch_up and cvd_flow > 0:
+            alert = (f"🔥 **$LSL BUY SIGNAL (V2.0)**\n"
+                     f"📍 Zone: {s} Low Sweep\n"
+                     f"⚡ BTrader: CHoCH Up ✅\n"
+                     f"📊 Sn1P3r: Delta Positive ✅\n"
+                     f"💰 Entry Price: `${last_c:.2f}`")
+            send_telegram(alert, TOPIC_ALERTS)
+
+        # 🔴 $LSH (Liquidity Sweep High) + CHoCH Down + Negative Delta
+        elif last_h > z['H'] and last_c < z['H'] and choch_down and cvd_flow < 0:
+            alert = (f"🔥 **$LSH SELL SIGNAL (V2.0)**\n"
+                     f"📍 Zone: {s} High Sweep\n"
+                     f"⚡ BTrader: CHoCH Down ✅\n"
+                     f"📊 Sn1P3r: Delta Negative ✅\n"
+                     f"💰 Entry Price: `${last_c:.2f}`")
+            send_telegram(alert, TOPIC_ALERTS)
 
 if __name__ == "__main__":
-    run_system()
+    run_e11_v2()
     
