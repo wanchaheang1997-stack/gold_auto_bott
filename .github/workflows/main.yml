@@ -1,10 +1,10 @@
-name: Gold Sovereign Sniper V11.0
+name: Gold Sovereign Sniper V12.1
 
 on:
   schedule:
-    # រត់រៀងរាល់ ៣០ នាទីម្ដង
+    # រត់រៀងរាល់ ៣០ នាទីម្ដង (បងអាចដូរជា '*/15 * * * *' បើចង់ឱ្យលឿនជាងនេះ)
     - cron: '*/30 * * * *'
-  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run ផ្ទាល់ដៃ
+  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run ផ្ទាល់ដៃក្នុង GitHub Actions
 
 jobs:
   build:
