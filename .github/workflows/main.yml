@@ -1,31 +1,21 @@
-name: Gold Sovereign Sniper V12.1
+name: Gold Sovereign Sniper V10.3.3
 
 on:
   schedule:
-    # រត់រៀងរាល់ ៣០ នាទីម្ដង (បងអាចដូរជា '*/15 * * * *' បើចង់ឱ្យលឿនជាងនេះ)
-    - cron: '*/30 * * * *'
-  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run ផ្ទាល់ដៃក្នុង GitHub Actions
+    # រត់រៀងរាល់ ១៥ នាទីម្ដង ដើម្បីចាប់សញ្ញា Alert ឱ្យទាន់ពេល
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install yfinance pandas numpy requests pytz
-
-      - name: Run Sovereign Bot
-        env:
+      - run: pip install yfinance pandas numpy requests pytz
+      - env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
         run: python bot.py
