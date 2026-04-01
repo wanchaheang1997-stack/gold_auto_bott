@@ -122,7 +122,7 @@ def run_system():
     pdl = df_h1['Low'].iloc[-24:-1].min()
 
     # --- [A] INSTITUTIONAL MARKET REPORT (Topic 8) ---
-    if now_kh.minute <= 5 and now_kh.hour in [8, 11, 15, 19, 21]:
+    if now_kh.minute <= 5 and now_kh.hour in [8, 11, 14, 15, 19, 21]:
         # Fundamental: Economic Calendar
         fundamental_section = "\n".join(economic_news[:3]) # យក News ៣ ដំបូង
         
