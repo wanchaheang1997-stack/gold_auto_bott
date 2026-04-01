@@ -1,13 +1,13 @@
-name: Gold Highest Supreme Sentinel V7.5
+name: Gold Sovereign Sentinel V10
 
 on:
   schedule:
-    # ដើររៀងរាល់ 1 ម៉ោងម្តង (00, 01, 02, ... 23:00 UTC)
-    - cron: '0 * * * *'
+    # ដើររៀងរាល់ 30 នាទីម្តង ដើម្បីចាប់ SFP និង Update Sentiment/Calendar
+    - cron: '*/30 * * * *'
   workflow_dispatch: # បងអាចចុច Run ដោយដៃបានគ្រប់ពេល
 
 jobs:
-  run-supreme-bot:
+  run-sovereign-bot:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -17,14 +17,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip' # ជួយឱ្យវា Run កាន់តែលឿន (Caching)
+          cache: 'pip'
 
-      - name: Install Supreme Dependencies
+      - name: Install Advanced Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install yfinance pandas numpy requests pytz
+          # បន្ថែម beautifulsoup4 និង lxml សម្រាប់ទាញទិន្នន័យពី Web
+          pip install yfinance pandas numpy requests pytz beautifulsoup4 lxml
 
-      - name: Execute Highest Supreme Bot
+      - name: Execute V10 Sovereign Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
@@ -33,7 +34,7 @@ jobs:
       - name: Job Summary
         if: always()
         run: |
-          echo "### 🚀 Bot Status Report" >> $GITHUB_STEP_SUMMARY
+          echo "### 🏛 V10 Sovereign Status" >> $GITHUB_STEP_SUMMARY
           echo "Execution Time: $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "Status: Success ✅" >> $GITHUB_STEP_SUMMARY
+          echo "Status: Analysis & Alerts Active ✅" >> $GITHUB_STEP_SUMMARY
           
