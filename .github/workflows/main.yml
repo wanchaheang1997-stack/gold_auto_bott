@@ -1,13 +1,13 @@
-name: Gold Sovereign Sentinel V10
+name: Gold Sovereign Stable
 
 on:
   schedule:
-    # ដើររៀងរាល់ 30 នាទីម្តង ដើម្បីចាប់ SFP និង Update Sentiment/Calendar
+    # ដើររៀងរាល់ 30 នាទីម្តង
     - cron: '*/30 * * * *'
-  workflow_dispatch: # បងអាចចុច Run ដោយដៃបានគ្រប់ពេលក្នុង Tab Actions
+  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run ផ្ទាល់ដៃ
 
 jobs:
-  run-sovereign-bot:
+  run-bot:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -17,24 +17,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
-      - name: Install Advanced Dependencies
+      - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip
-          # បន្ថែម beautifulsoup4 និង lxml សម្រាប់ Scrape ទិន្នន័យពី Web
-          pip install yfinance pandas numpy requests pytz beautifulsoup4 lxml
+          pip install yfinance pandas numpy requests pytz
 
-      - name: Execute V10 Sovereign Bot
+      - name: Run Sovereign Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
         run: python bot.py
-
-      - name: Job Summary
-        if: always()
-        run: |
-          echo "### 🏛 V10 Sovereign Status" >> $GITHUB_STEP_SUMMARY
-          echo "Execution Time: $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "Status: Analysis & Alerts Active ✅" >> $GITHUB_STEP_SUMMARY
-          
+        
