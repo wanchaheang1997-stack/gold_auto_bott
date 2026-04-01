@@ -1,10 +1,10 @@
-name: Gold Sovereign Stable
+name: Gold Sovereign Stable V10.2
 
 on:
   schedule:
     # ដើររៀងរាល់ 30 នាទីម្តង
     - cron: '*/30 * * * *'
-  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run ផ្ទាល់ដៃ
+  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run ផ្ទាល់ដៃក្នុង Actions Tab
 
 jobs:
   run-bot:
