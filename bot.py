@@ -11,90 +11,87 @@ from datetime import datetime
 # ========================================
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 GROUP_ID = os.getenv('TELEGRAM_ID')
+
+# សូមផ្ទៀងផ្ទាត់លេខ Topic ID ក្នុង URL Telegram របស់បង
 TOPIC_ANALYSIS = 8   
 TOPIC_ALERTS = 18    
 TIMEZONE = "Asia/Phnom_Penh"
 
-def get_realtime_calendar():
-    """ទាញយកព័ត៌មានសេដ្ឋកិច្ចពីប្រភពបម្រុង (Stable Source)"""
-    try:
-        # បើ Yahoo គាំង យើងប្រើព័ត៌មាន Static សំខាន់ៗជាបណ្ដោះអាសន្នដើម្បីកុំឱ្យ Bot គាំង
-        return "• `19:30`: 🔴 High Impact News (USD)\n• `21:00`: 🟡 Medium Impact News (USD)"
-    except:
-        return "• No news data available."
-
-def get_macro_and_sentiment():
-    try:
-        gold_ticker = yf.Ticker("XAUUSD=X")
-        hist_2d = gold_ticker.history(period="2d")
-        if hist_2d.empty: return 0.0, 0.0, "Sentiment: N/A", "50/50"
-        
-        gold_now = hist_2d['Close'].iloc[-1]
-        tnx = yf.Ticker("^TNX").history(period="2d")['Close'].iloc[-1]
-        
-        hist_5d = gold_ticker.history(period="5d", interval="1h")
-        delta = hist_5d['Close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rsi = 100 - (100 / (1 + (gain / loss))).iloc[-1]
-        
-        s_bias = "Retail Bias: BUYING 🟢" if rsi > 60 else "Retail Bias: SELLING 🔴"
-        s_ratio = f"{int(rsi)}% / {100-int(rsi)}%"
-        return tnx, gold_now, s_bias, s_ratio
-    except: return 0.0, 0.0, "Sentiment: N/A", "50/50"
-
-def send_telegram(text, topic_id):
-    if not TOKEN or not GROUP_ID: return
+def send_telegram(text, topic_id=None):
+    if not TOKEN or not GROUP_ID:
+        print("❌ Missing Secrets!")
+        return
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown", "message_thread_id": topic_id}
+    payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown"}
+    if topic_id: payload["message_thread_id"] = topic_id
     try:
         r = requests.post(url, data=payload, timeout=15)
-        print(f"Telegram Response: {r.status_code}") # មើលក្នុង Log GitHub
-    except Exception as e:
-        print(f"Telegram Error: {e}")
+        print(f"Telegram Log: {r.status_code}")
+    except: print("❌ Connection Failed")
 
 def run_system():
     kh_tz = pytz.timezone(TIMEZONE)
     now_kh = datetime.now(kh_tz)
     
-    print(f"Bot starting at {now_kh}") # Debug Log
+    print(f"🚀 Sniper Start: {now_kh.strftime('%H:%M:%S')}")
 
     try:
+        # ១. ទាញទិន្នន័យ XAUUSD (Spot Gold)
         ticker = yf.Ticker("XAUUSD=X")
         df_h1 = ticker.history(period="3d", interval="1h")
         df_m5 = ticker.history(period="1d", interval="1m")
         
-        if df_h1.empty:
-            print("Error: No market data from Yahoo Finance")
+        if df_h1.empty or df_m5.empty:
+            print("❌ No Market Data")
             return
 
-        tnx, gold_live, s_bias, s_ratio = get_macro_and_sentiment()
-        live_news = get_realtime_calendar()
-        
-        # CVD Logic
+        # ២. គណនា Session High/Low (Tokyo & London)
+        sessions = {'Tokyo': ('08:00', '10:00'), 'London': ('14:00', '16:00'), 'NY': ('19:00', '22:00')}
+        sess_data = {}
+        for name, (s, e) in sessions.items():
+            d = df_h1.between_time(s, e)
+            sess_data[name] = {'H': d['High'].max() if not d.empty else 0.0, 
+                               'L': d['Low'].min() if not d.empty else 0.0}
+
+        # ៣. គណនា Sn1P3r Volume Delta (ដូចក្នុង Indicator បងប្រើ)
         df_m5['D'] = np.where(df_m5['Close'] > df_m5['Open'], df_m5['Volume'], -df_m5['Volume'])
-        cvd_flow = "Sn1P3r Bias: BUYING 🟢" if df_m5['D'].tail(5).sum() > 0 else "Sn1P3r Bias: SELLING 🔴"
+        cvd_val = df_m5['D'].tail(5).sum()
+        cvd_flow = "BUYING 🟢" if cvd_val > 0 else "SELLING 🔴"
 
-        # ជំហានតេស្ត៖ ផ្ញើសារសាកល្បងភ្លាមៗពេល Run
-        send_telegram(f"🔔 **Sovereign Bot V10.8.1 is Active!**\n💰 Live Price: `${gold_live:.2f}`", TOPIC_ALERTS)
-
-        # REPORT តាមម៉ោង
-        if now_kh.hour in [8, 10, 11, 14, 15, 16, 17, 18, 19, 21]:
+        # ៤. ផ្ញើ Report តាមម៉ោង (Topic 8)
+        if now_kh.hour in [8, 11, 14, 16, 17, 19, 21]:
             report = (
-                f"🏛 **SOVEREIGN V10.8.1 (FIXED)**\n"
+                f"🏛 **SOVEREIGN SNIPER V11.0**\n"
                 f"📅 `{now_kh.strftime('%H:%M')}` | **XAUUSD**\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"📅 **ECONOMIC CALENDAR:**\n{live_news}\n\n"
-                f"🧠 **SENTIMENT & VOLUME:**\n"
-                f"• `{s_bias}` ({s_ratio})\n"
-                f"• `{cvd_flow}`\n"
-                f"• Yield: `{tnx:.2f}%` | Price: `${gold_live:.2f}`\n"
-                f"━━━━━━━━━━━━━━━━━━━━"
+                f"📊 **LIVE MARKET:**\n"
+                f"• Price: `${df_m5['Close'].iloc[-1]:.2f}`\n"
+                f"• Sn1P3r Delta: `{cvd_flow}`\n\n"
+                f"🗺 **SESSION ZONES:**\n"
+                f"• Tokyo: `${sess_data['Tokyo']['H']:.2f}` - `${sess_data['Tokyo']['L']:.2f}`\n"
+                f"• London: `${sess_data['London']['H']:.2f}` - `${sess_data['London']['L']:.2f}`\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"🎯 *Ready for BTrader CHoCH Confirmation*"
             )
             send_telegram(report, TOPIC_ANALYSIS)
+
+        # ៥. REAL-TIME SFP ALERTS (Topic 18)
+        curr_h, curr_l, curr_c = df_m5['High'].iloc[-1], df_m5['Low'].iloc[-1], df_m5['Close'].iloc[-1]
+        
+        for s_name, prices in sess_data.items():
+            if prices['H'] == 0: continue
+            # Check Sweep High
+            if curr_h > prices['H'] and curr_c < prices['H']:
+                msg = f"🚨 **SFP ALERT: {s_name.upper()} HIGH SWEEP**\n💰 Price: `${curr_c:.2f}`\n📊 Delta: `{cvd_flow}`"
+                send_telegram(msg, TOPIC_ALERTS)
+            # Check Sweep Low
+            elif curr_l < prices['L'] and curr_c > prices['L']:
+                msg = f"🚨 **SFP ALERT: {s_name.upper()} LOW SWEEP**\n💰 Price: `${curr_c:.2f}`\n📊 Delta: `{cvd_flow}`"
+                send_telegram(msg, TOPIC_ALERTS)
+
     except Exception as e:
-        print(f"System Error: {e}")
+        print(f"❌ Error: {e}")
 
 if __name__ == "__main__":
     run_system()
-        
+                              
