@@ -1,25 +1,27 @@
-name: Gold Sovereign Stable V10.2
+name: Gold Sovereign Sniper V10.8
 
 on:
   schedule:
-    # ដើររៀងរាល់ 30 នាទីម្តង
+    # ឱ្យ Bot រត់រៀងរាល់ ៣០ នាទីម្តង (ឬបងអាចដូរមក ១៥ នាទីម្តងបាន)
     - cron: '*/30 * * * *'
-  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run ផ្ទាល់ដៃក្នុង Actions Tab
+  workflow_dispatch: # សម្រាប់ឱ្យបងចុច Run ផ្ទាល់ដៃបានគ្រប់ពេល
 
 jobs:
-  run-bot:
+  build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: symbols/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: '3.9'
 
       - name: Install Dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install yfinance pandas numpy requests pytz
 
       - name: Run Sovereign Bot
