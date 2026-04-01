@@ -1,8 +1,8 @@
-name: Gold Sovereign Sniper V10.3.3
+name: Gold Sovereign Sniper V10.3.4
 
 on:
   schedule:
-    # រត់រៀងរាល់ ១៥ នាទីម្ដង ដើម្បីចាប់សញ្ញា Alert ឱ្យទាន់ពេល
+    # រត់រៀងរាល់ ១៥ នាទីម្ដង ដើម្បីឱ្យចំដើមម៉ោងរបស់ Report និងចាប់ Alert បានទាន់ពេល
     - cron: '*/15 * * * *'
   workflow_dispatch:
 
