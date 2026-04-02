@@ -1,15 +1,14 @@
-name: Gold Sovereign E11 v2.0
+name: E11 Concept 2.0 Sovereign
 
 on:
   schedule:
-    # រត់រៀងរាល់ ១៥ នាទីម្ដង (ស្មើនឹង ៩៦ ដងក្នុងមួយថ្ងៃ)
-    - cron: '*/15 * * * *'
-  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run តេស្តដោយផ្ទាល់ដៃ
+    # រត់រៀងរាល់ 10 នាទីម្តង ដើម្បីចាប់ SFP គ្រប់ TF ឱ្យទាន់ពេល
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -21,10 +20,9 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install yfinance pandas numpy requests pytz
 
-      - name: Run E11 v2.0 Trinity Bot
+      - name: Run E11 Sniper Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
