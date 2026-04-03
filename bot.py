@@ -19,10 +19,12 @@ def send_telegram(text, topic_id=None):
     url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     payload = {"chat_id": GROUP_ID, "text": text, "parse_mode": "Markdown"}
     if topic_id: payload["message_thread_id"] = topic_id
-    try: requests.post(url, data=payload, timeout=15)
-    except: pass
+    try:
+        requests.post(url, data=payload, timeout=15)
+    except Exception as e:
+        print(f"Error sending Telegram: {e}")
 
-# --- 📊 LIQUIDITY PROFILE (VAH, VAL, POC) ---
+# --- 📊 LIQUIDITY PROFILE CALCULATION (VAH, VAL, POC) ---
 def get_liquidity_profile(df, va_percent=70):
     if df.empty: return None, None, None
     price_min, price_max = df['Low'].min(), df['High'].max()
@@ -45,65 +47,73 @@ def get_liquidity_profile(df, va_percent=70):
         else: break
     return bins[up_idx+1], bins[down_idx], (bins[poc_idx]+bins[poc_idx+1])/2
 
-# --- 🚨 MULTI-TF SFP CHECKER ---
+# --- 🚨 MULTI-TF SFP & LIQUIDITY SWEEP CHECKER ---
 def check_sfp_logic(df, tf_name, levels):
+    if df.empty: return
     last = df.iloc[-1]
     for name, val in levels.items():
         if val is None: continue
-        # $LSL Buy Setup
+        # $LSL Buy Setup (Sweep ក្រោមខ្សែ Liquidity)
         if last['Low'] < val and last['Close'] > val:
             msg = f"🔥 **$LSL BUY SETUP ({tf_name})**\n📍 Sweep: {name}\n💰 Price: `${last['Close']:.2f}`"
             send_telegram(msg, TOPIC_ALERTS)
-        # $LSH Sell Setup
+        # $LSH Sell Setup (Sweep លើខ្សែ Liquidity)
         if last['High'] > val and last['Close'] < val:
             msg = f"🔥 **$LSH SELL SETUP ({tf_name})**\n📍 Sweep: {name}\n💰 Price: `${last['Close']:.2f}`"
             send_telegram(msg, TOPIC_ALERTS)
 
-def run_e11_v13():
+# --- 🚀 MAIN RUNNER ---
+def run_sniper_engine():
     kh_tz = pytz.timezone(TIMEZONE)
     now = datetime.now(kh_tz)
     h = now.hour
 
-    # Get Data
-    gold = yf.Ticker("GC=F")
-    df_1h = gold.history(period="5d", interval="1h")
-    df_15m = gold.history(period="2d", interval="15m")
-    df_5m = gold.history(period="1d", interval="5m")
+    # 1. FETCH DATA
+    gold_ticker = yf.Ticker("GC=F")
+    df_1h = gold_ticker.history(period="5d", interval="1h")
+    df_15m = gold_ticker.history(period="2d", interval="15m")
+    df_5m = gold_ticker.history(period="1d", interval="5m")
     dxy = yf.Ticker("DX-Y.NYB").history(period="1d")
 
-    # 1. Calculate Profiles & Bias
+    # 2. CALCULATE LEVELS
     vah, val, poc = get_liquidity_profile(df_1h)
-    daily_bias = "BULLISH 🟢" if df_1h['Close'].iloc[-1] > df_1h['Open'].iloc[-5] else "BEARISH 🔴"
-    dxy_status = "Strong 📈" if dxy['Close'].iloc[-1] > dxy['Open'].iloc[-1] else "Weak 📉"
+    session_h = df_1h['High'].max()
+    session_l = df_1h['Low'].min()
     
-    # 2. Key Liquidity Levels for Alert
-    levels = {"VAH": vah, "VAL": val, "POC": poc, "Session High": df_1h['High'].max(), "Session Low": df_1h['Low'].min()}
+    levels = {
+        "VAH (Internal)": vah, 
+        "VAL (Internal)": val, 
+        "POC": poc, 
+        "Session High": session_h, 
+        "Session Low": session_l
+    }
     
-    # 3. Always Check SFP (Topic 18)
+    # 3. ALERT SFP (Topic 18) - ដំណើរការ ២៤ ម៉ោង
     check_sfp_logic(df_5m, "5m", levels)
     check_sfp_logic(df_15m, "15m", levels)
     check_sfp_logic(df_1h, "1h", levels)
 
-    # 4. Intelligence Report (Topic 8) - Scheduled
-    if (7 <= h <= 10) or (13 <= h <= 16) or (18 <= h <= 22):
-        # ផ្ញើតែម្តងគត់ក្នុងចន្លោះម៉ោងនីមួយៗ (អាចប្រើ cache ឬប្រៀបធៀបនាទី)
-        if now.minute < 15: 
-            report = (
-                f"🏛 **E11 SOVEREIGN INTELLIGENCE**\n"
-                f"💰 `Price: ${df_1h['Close'].iloc[-1]:.2f}`\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"📊 **BIAS & MACRO:**\n"
-                f"• Daily Bias: {daily_bias}\n"
-                f"• DXY Impact: {dxy_status}\n"
-                f"• 4H Structure: `Testing Liquidity Profile`\n\n"
-                f"💎 **LIQUIDITY PROFILE:**\n"
-                f"• VAH: `${vah:.2f}` | VAL: `${val:.2f}`\n"
-                f"• POC: `${poc:.2f}`\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"✅ *24/7 Multi-TF SFP Monitoring...*"
-            )
-            send_telegram(report, TOPIC_REPORT)
+    # 4. INTELLIGENCE REPORT (Topic 8) - ចន្លោះម៉ោង 7 AM ដល់ 10 PM
+    if 7 <= h <= 22:
+        daily_bias = "BULLISH 🟢" if df_1h['Close'].iloc[-1] > df_1h['Open'].iloc[-5] else "BEARISH 🔴"
+        dxy_status = "Strong 📈" if not dxy.empty and dxy['Close'].iloc[-1] > dxy['Open'].iloc[-1] else "Weak 📉"
+        
+        report = (
+            f"🏛 **E11 SOVEREIGN INTELLIGENCE**\n"
+            f"⏰ `Time: {now.strftime('%H:%M')} | Price: ${df_1h['Close'].iloc[-1]:.2f}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 **TECHNICAL BIAS:**\n"
+            f"• 4H Structure: `Analyzing Flow`\n"
+            f"• Daily Bias: `{daily_bias}`\n"
+            f"• DXY Impact: `{dxy_status}`\n\n"
+            f"💎 **LIQUIDITY PROFILE:**\n"
+            f"• VAH: `${vah:.2f}` | VAL: `${val:.2f}`\n"
+            f"• POC: `${poc:.2f}`\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"✅ *Monitoring SFP ($LSL/$LSH) Active!*"
+        )
+        send_telegram(report, TOPIC_REPORT)
 
 if __name__ == "__main__":
-    run_e11_v13()
-    
+    run_sniper_engine()
+        
