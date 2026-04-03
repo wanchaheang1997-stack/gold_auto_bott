@@ -2,9 +2,10 @@ name: E11 Concept 2.0 Sovereign
 
 on:
   schedule:
-    # រត់រៀងរាល់ 10 នាទីម្តង ដើម្បីចាប់ SFP គ្រប់ TF ឱ្យទាន់ពេល
-    - cron: '*/10 * * * *'
-  workflow_dispatch:
+    # រត់រៀងរាល់ 2 ម៉ោងម្តង (UTC: 0,2,4,6,8,10,12,14,16)
+    # ស្មើនឹងម៉ោងនៅខ្មែរ: 7, 9, 11, 13, 15, 17, 19, 21
+    - cron: '0 0,2,4,6,8,10,12,14,16 * * *'
+  workflow_dispatch: # បងអាចចុច Run ដោយដៃបានគ្រប់ពេល
 
 jobs:
   build:
@@ -12,16 +13,12 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-
       - name: Install Dependencies
-        run: |
-          pip install yfinance pandas numpy requests pytz
-
+        run: pip install yfinance pandas numpy requests pytz
       - name: Run E11 Sniper Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
