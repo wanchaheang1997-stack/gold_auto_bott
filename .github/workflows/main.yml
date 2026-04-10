@@ -1,19 +1,27 @@
-name: E11 Hybrid Sniper V26
+name: E11 Master Sniper V28
 on:
   schedule:
-    # រត់រៀងរាល់ 5 នាទី ចាប់ពីម៉ោង 8AM-10PM KH
-    - cron: '*/5 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 * * 1-5'
-  workflow_dispatch:
+    # រត់រៀងរាល់ 5 នាទី (24 ម៉ោង ថ្ងៃច័ន្ទ-សុក្រ)
+    - cron: '*/5 * * * 1-5'
+  workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run តេស្តដោយដៃ
 jobs:
   engine:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-      - run: pip install yfinance tradingview-ta pandas numpy requests pytz
-      - env:
+
+      - name: Install Dependencies
+        run: |
+          pip install yfinance pandas numpy requests pytz tradingview-ta
+
+      - name: Run Sniper Engine
+        env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
         run: python bot.py
