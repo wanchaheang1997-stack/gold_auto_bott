@@ -1,17 +1,18 @@
-name: E11 TV Sniper V21
+name: E11 Hybrid Sniper V26
 on:
   schedule:
-    - cron: '0 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 * * 1-5'
+    # រត់រៀងរាល់ 5 នាទី ចាប់ពីម៉ោង 8AM-10PM KH
+    - cron: '*/5 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15 * * 1-5'
   workflow_dispatch:
 jobs:
-  sniper_engine:
+  engine:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-      - run: pip install tradingview-ta pandas numpy requests pytz
+      - run: pip install yfinance tradingview-ta pandas numpy requests pytz
       - env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_ID: ${{ secrets.TELEGRAM_ID }}
