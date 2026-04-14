@@ -15,63 +15,42 @@ def send_telegram(text, topic_id=None):
     try: requests.post(url, data=payload, timeout=15)
     except: pass
 
-def run_v32_logic():
+def run_v36_no_key_engine():
     kh_tz = pytz.timezone("Asia/Phnom_Penh")
     now = datetime.now(kh_tz)
     if now.weekday() >= 5: return
 
     try:
+        # 1. វិភាគដង្ហើមទីផ្សារ (Volatility)
         gold = yf.Ticker("GC=F")
-        df = gold.history(period="5d", interval="1h")
-        if df.empty: return
+        df_1h = gold.history(period="2d", interval="1h")
+        curr_p = df_1h['Close'].iloc[-1]
         
-        curr_p = df['Close'].iloc[-1]
-        prev_p = df['Close'].iloc[-2]
-        h1_ob_l, h1_ob_h = df['Low'].iloc[-2], df['High'].iloc[-2]
+        # គណនាការប្រែប្រួលក្នុង ១ ម៉ោងចុងក្រោយ
+        price_change = abs(curr_p - df_1h['Open'].iloc[-1])
+        volatility_status = "⚠️ HIGH VOLATILITY" if price_change > 5 else "✅ NORMAL"
 
-        # --- LOGIC ANALYSIS ---
-        trend = "BULLISH 🚀" if curr_p > df['Close'].iloc[-24] else "BEARISH 📉"
-        
-        # Logic Buy/Sell Advice
-        if curr_p >= h1_ob_h:
-            logic_move = "⚠️ WAIT FOR REJECTION (SELL SETUP)"
-            psy_tip = "កុំដេញ Buy តាមតម្លៃខ្ពស់! Sniper រង់ចាំឱ្យគោលដៅចុះខ្សោយសិន ទើបបាញ់បញ្ច្រាស។"
-        elif curr_p <= h1_ob_l:
-            logic_move = "✅ LOOK FOR CONFIRMATION (BUY SETUP)"
-            psy_tip = "តម្លៃមកដល់តំបន់ទិញហើយ! តែត្រូវរង់ចាំឱ្យមានកម្លាំងទិញត្រឡប់មកវិញ (CHoCH) សិន សឹមចូល។"
-        else:
-            logic_move = "👀 NO-TRADE ZONE (PATIENCE)"
-            psy_tip = "ទីផ្សារកំពុងស្ថិតក្នុងភាពមិនច្បាស់លាស់។ ការមិនចូលជួញដូរ ក៏ជាការចំណេញដូចគ្នា (Protect Capital)។"
-
-        # 1. ALERT LOGIC (Topic 3)
-        if h1_ob_l <= curr_p <= h1_ob_h:
-            alert_msg = (
-                f"🎯 **XAUUSD SNIPER ALERT**\n"
-                f"🔥 Price in 1H Zone: `${curr_p:.2f}`\n"
-                f"📍 Logic: {logic_move}\n"
-                f"💡 Mindset: {psy_tip}"
-            )
-            send_telegram(alert_msg, TOPIC_ALERTS)
-
-        # 2. ENHANCED REPORT (Topic 2)
+        # 2. REPORT (Topic 2)
         if now.minute < 10:
             report = (
-                f"🏛 **E11 GLOBAL INTELLIGENCE V32**\n"
-                f"⏰ `Time: {now.strftime('%H:%M')} | Price: ${curr_p:.2f}`\n"
+                f"🏛 **E11 INTELLIGENCE V36**\n"
+                f"⏰ `{now.strftime('%H:%M')} | Price: ${curr_p:.2f}`\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"📊 **MARKET ANALYSIS:**\n"
-                f"• Trend: {trend}\n"
-                f"• OB Zone: `${h1_ob_l:.2f} - ${h1_ob_h:.2f}`\n\n"
-                f"🧠 **STRATEGY & PSYCHOLOGY:**\n"
-                f"👉 **Action:** {logic_move}\n"
-                f"🧘 **Mindset:** _{psy_tip}_\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"✅ *Wait for the perfect setup!*"
+                f"⚡ **MARKET PULSE:**\n"
+                f"• Status: {volatility_status}\n"
+                f"• PDH/PDL: In Range\n\n"
+                f"🧠 **PSYCHOLOGY:**\n"
+                f"_{'ទីផ្សារបក់ខ្លាំង! រង់ចាំឱ្យតម្លៃស្ងប់សិនទើបចូលបាញ់។' if price_change > 5 else 'ទីផ្សារដើរស្រួល។ រក្សាវិន័យតាម Plan!'}_"
             )
             send_telegram(report, TOPIC_REPORT)
+
+        # 3. ALERT (Topic 3) - បាញ់តែពេលមាសបុក Zone
+        h1_ob_l, h1_ob_h = df_1h['Low'].iloc[-2], df_1h['High'].iloc[-2]
+        if h1_ob_l <= curr_p <= h1_ob_h:
+            send_telegram(f"🎯 **SNIPER ALERT**\nPrice in OB Zone: `${curr_p:.2f}`", TOPIC_ALERTS)
 
     except Exception as e: print(f"Error: {e}")
 
 if __name__ == "__main__":
-    run_v32_logic()
+    run_v36_no_key_engine()
     
