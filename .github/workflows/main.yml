@@ -1,7 +1,7 @@
-name: E11 Master Sniper V31.1
+name: E11 Master Sniper V32
 on:
   schedule:
-    # រត់រៀងរាល់ 5 នាទី ជារៀងរាល់ថ្ងៃច័ន្ទ ដល់ សុក្រ
+    # រត់រៀងរាល់ 5 នាទី ពីថ្ងៃច័ន្ទ ដល់ សុក្រ
     - cron: '*/5 * * * 1-5'
   workflow_dispatch: # ប៊ូតុងសម្រាប់ចុច Run តេស្តដោយដៃ
 jobs:
@@ -15,7 +15,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
-          cache: 'pip' # ជួយឱ្យការ Run លើកក្រោយកាន់តែលឿន
+          cache: 'pip'
 
       - name: 3. Install required trading libraries
         run: |
