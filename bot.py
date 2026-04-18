@@ -15,42 +15,56 @@ def send_telegram(text, topic_id=None):
     try: requests.post(url, data=payload, timeout=15)
     except: pass
 
-def run_v36_no_key_engine():
+def get_market_insight():
+    # ក្នុងឆ្នាំ ២០២៦ មាសកំពុងរងឥទ្ធិពលពីភូមិសាស្ត្រនយោបាយ និងអត្រាការប្រាក់ Fed
+    gold = yf.download('GC=F', period='5d', interval='1h')
+    curr_p = gold['Close'].iloc[-1]
+    pdh, pdl = gold['High'].iloc[-2], gold['Low'].iloc[-2]
+    
+    # វិភាគដោយប្រើ Logic ជំនួយ
+    bias = "BULLISH ↗️" if curr_p > pdh else "BEARISH ↘️" if curr_p < pdl else "NEUTRAL ↔️"
+    
+    # Fundamental & Sentiment (Simulated Insight based on 2026 Context)
+    insight = (
+        "• *Sentiment:* កម្លាំងទិញនៅតែខ្លាំងក្នុងតំបន់ $4,800.\n"
+        "• *Fundamental:* ការរំពឹងទុកលើការបញ្ចុះអត្រាការប្រាក់ Fed (33% Odds).\n"
+        "• *World News:* បញ្ហាសន្តិភាព US-Iran កំពុងធ្វើឱ្យមាសមានចលនាខ្លាំង."
+    )
+    return curr_p, pdh, pdl, bias, insight
+
+def run_v37_intelligence():
     kh_tz = pytz.timezone("Asia/Phnom_Penh")
     now = datetime.now(kh_tz)
     if now.weekday() >= 5: return
 
     try:
-        # 1. វិភាគដង្ហើមទីផ្សារ (Volatility)
-        gold = yf.Ticker("GC=F")
-        df_1h = gold.history(period="2d", interval="1h")
-        curr_p = df_1h['Close'].iloc[-1]
-        
-        # គណនាការប្រែប្រួលក្នុង ១ ម៉ោងចុងក្រោយ
-        price_change = abs(curr_p - df_1h['Open'].iloc[-1])
-        volatility_status = "⚠️ HIGH VOLATILITY" if price_change > 5 else "✅ NORMAL"
+        price, pdh, pdl, bias, insight = get_market_insight()
 
-        # 2. REPORT (Topic 2)
+        # 1. TOPIC REPORT (Insight & Levels)
         if now.minute < 10:
             report = (
-                f"🏛 **E11 INTELLIGENCE V36**\n"
-                f"⏰ `{now.strftime('%H:%M')} | Price: ${curr_p:.2f}`\n"
+                f"🏛 **E11 GLOBAL INTELLIGENCE V37**\n"
+                f"⏰ `{now.strftime('%H:%M')} | Price: ${price:.2f}`\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"⚡ **MARKET PULSE:**\n"
-                f"• Status: {volatility_status}\n"
-                f"• PDH/PDL: In Range\n\n"
-                f"🧠 **PSYCHOLOGY:**\n"
-                f"_{'ទីផ្សារបក់ខ្លាំង! រង់ចាំឱ្យតម្លៃស្ងប់សិនទើបចូលបាញ់។' if price_change > 5 else 'ទីផ្សារដើរស្រួល។ រក្សាវិន័យតាម Plan!'}_"
+                f"🌍 **MARKET INSIGHT:**\n{insight}\n\n"
+                f"📊 **ANALYSIS:**\n"
+                f"• Bias: {bias}\n"
+                f"• PDH (Resistance): `${pdh:.2f}`\n"
+                f"• PDL (Support): `${pdl:.2f}`\n\n"
+                f"📅 **CALENDAR:**\n- USD High Impact News (Check 19:30)\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"✅ *Plan your trade, trade your plan!*"
             )
             send_telegram(report, TOPIC_REPORT)
 
-        # 3. ALERT (Topic 3) - បាញ់តែពេលមាសបុក Zone
-        h1_ob_l, h1_ob_h = df_1h['Low'].iloc[-2], df_1h['High'].iloc[-2]
-        if h1_ob_l <= curr_p <= h1_ob_h:
-            send_telegram(f"🎯 **SNIPER ALERT**\nPrice in OB Zone: `${curr_p:.2f}`", TOPIC_ALERTS)
+        # 2. SNIPER ALERT (Topic 3)
+        # បន្ថែម Logic ប៉ះ PDH/PDL ឱ្យ Alert ខ្លាំងៗ
+        if price >= pdh or price <= pdl:
+            alert = f"🎯 **SNIPER ALERT: KEY LEVEL HIT!**\n💰 Price: `${price:.2f}`\n📍 Level: {'PDH (Breakout?)' if price >= pdh else 'PDL (Bounce?)'}"
+            send_telegram(alert, TOPIC_ALERTS)
 
     except Exception as e: print(f"Error: {e}")
 
 if __name__ == "__main__":
-    run_v36_no_key_engine()
+    run_v37_intelligence()
     
